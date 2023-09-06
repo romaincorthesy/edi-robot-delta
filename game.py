@@ -1,22 +1,26 @@
 """Edit text with the keyboard."""
 import pygame
 from pygame.locals import *
-import time
+from collections import namedtuple
+from pprint import pprint
+
+Point = namedtuple("Point", "x y")
 
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GRAY = (200, 200, 200)
 
+mousePosition = Point(0, 0)
+
 pygame.init()
 screen = pygame.display.set_mode((640, 240))
+font = pygame.font.SysFont(None, 24)
 
-text = 'this text is editable'
-font = pygame.font.SysFont(None, 48)
-img = font.render(text, True, RED)
+mousePositionText = 'position'
+img = font.render(mousePositionText, True, RED)
 
 rect = img.get_rect()
 rect.topleft = (20, 20)
-cursor = Rect(rect.topright, (3, rect.height))
 
 running = True
 background = GRAY
@@ -31,10 +35,15 @@ while running:
                 running = False
 
         if event.type == MOUSEMOTION:
-            print(event)
+            x, y = pygame.mouse.get_pos()
+            mousePosition = Point(x, y)
 
     screen.fill(background)
+
+    mousePositionText = f'Pos: {mousePosition.x}, {mousePosition.y}'
+    img = font.render(mousePositionText, True, RED)
     screen.blit(img, rect)
+
     pygame.display.update()
 
 pygame.quit()
