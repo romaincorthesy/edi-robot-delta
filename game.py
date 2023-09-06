@@ -27,19 +27,14 @@ while running:
             running = False
 
         if event.type == KEYDOWN:
-            if event.key == K_BACKSPACE:
-                if len(text) > 0:
-                    text = text[:-1]
-            else:
-                text += event.unicode
-            img = font.render(text, True, RED)
-            rect.size = img.get_size()
-            cursor.topleft = rect.topright
+            if event.key == K_ESCAPE:
+                running = False
+
+        if event.type == MOUSEMOTION:
+            print(event)
 
     screen.fill(background)
     screen.blit(img, rect)
-    if time.time() % 1 > 0.5:
-        pygame.draw.rect(screen, RED, cursor)
     pygame.display.update()
 
 pygame.quit()
