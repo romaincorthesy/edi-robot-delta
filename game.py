@@ -1,4 +1,5 @@
-"""Edit text with the keyboard."""
+#!/usr/bin/env python3
+
 import pygame
 from pygame.locals import *
 from collections import namedtuple
@@ -45,5 +46,7 @@ while running:
     screen.blit(img, rect)
 
     pygame.display.update()
+
+    print(mousePositionText)
 
 pygame.quit()
