@@ -14,7 +14,7 @@ GRAY = (200, 200, 200)
 mousePosition = Point(0, 0)
 
 pygame.init()
-screen = pygame.display.set_mode((640, 240))
+screen = pygame.display.set_mode((1440, 900))
 font = pygame.font.SysFont(None, 24)
 
 mousePositionText = 'position'
