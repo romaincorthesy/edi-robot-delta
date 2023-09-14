@@ -1,3 +1,4 @@
+# Source github user: laundmo (https://gist.github.com/laundmo/b224b1f4c8ef6ca5fe47e132c8deab56)
 def lerp(a: float, b: float, t: float) -> float:
     """Linear interpolate on the scale given by a to b, using t as the point on that scale.
 
