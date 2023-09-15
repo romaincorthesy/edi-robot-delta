@@ -5,11 +5,13 @@ import pygame
 from pygame.locals import *
 
 from InputDevice import Touchfoil, Mouse, IInputDevice
+from OutputDevice import RobotDelta
 
 
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GRAY = (200, 200, 200)
+
 
 # Screen setup
 DISPLAY_WIDTH: int = 1440
@@ -25,20 +27,31 @@ def updateScreen() -> None:
     pygame.display.update()
 
 pygame.init()
+# If set_mode is raising "pygame.error: Unable to open a console terminal",
+# and the python file is launched through ssh, the reason is there is no DISPLAY set.
+# Run "export DISPLAY=:0" through ssh and try again.
 screen = pygame.display.set_mode((DISPLAY_WIDTH, DISPLAY_HEIGHT))
 pygame.display.toggle_fullscreen()
 font = pygame.font.SysFont(None, 24)
 position_text = 'Position here'
+
 
 # Input device
 def updateCallback(device: IInputDevice) -> None:
     print("updateCallback(device) called")
     global position_text
     position_text = f'Position: {device.x}, {device.y}'
+    if robot.sendMsg(0xc0ffee, [1,2,3,4,5,6,7,8]) != 0:
+        print("Error sending message")
 
 input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
 # input_device = Mouse(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
 input_device.callbackUpdate = updateCallback
+
+
+# Output device
+robot = RobotDelta(sniff_traffic=True)
+
 
 running = True
 while running:
