@@ -5,7 +5,7 @@ from pygame.locals import *
 
 import ScaleConversion as SC
 from InputDevice import Touchfoil, Mouse, IInputDevice
-from OutputDevice import DeltaRobot
+from OutputDevice import DeltaRobot, OperationalSpace
 
 
 BLACK = (0, 0, 0)
@@ -48,8 +48,9 @@ def updateCallback(device: IInputDevice) -> None:
     print("updateCallback(device) called")
     global position_text
     position_text = f'Position: {device.x}, {device.y}'
-    fake_angle = device.x * 100 / DISPLAY_WIDTH
-    if robot.moveAxisTo(robot.A_axis_id, fake_angle) != 0:
+
+    x, y = screenToRobot(input_device, robot)
+    if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
         print("Error sending message")
 
 input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
@@ -60,6 +61,11 @@ input_device.callbackUpdate = updateCallback
 # Output device
 robot = DeltaRobot(A_axis_id=0xC0FFEE, B_axis_id=0xCACA0, C_axis_id=0xC0CA, sniff_traffic=True)
 
+def screenToRobot(input_device: IInputDevice, robot: DeltaRobot) -> tuple[float, float]:
+    x = SC.remap(0, input_device.screen_width, robot.operational_space.x_axis_min, robot.operational_space.x_axis_max, input_device.x)
+    y = SC.remap(0, input_device.screen_height, robot.operational_space.y_axis_min, robot.operational_space.y_axis_max, input_device.y)
+    
+    return (x,y)
 
 running = True
 while running:

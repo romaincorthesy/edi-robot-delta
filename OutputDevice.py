@@ -1,7 +1,28 @@
 #!/usr/bin/env python3
 
 import can
-import struct 
+import struct
+from ctypes import CDLL
+
+
+class OperationalSpace:
+    def __init__(self,
+                 x_axis_min: float, x_axis_max: float,
+                 y_axis_min: float, y_axis_max: float,
+                 z_axis_min: float, z_axis_max: float) -> None:
+        self.x_axis_min = x_axis_min
+        self.x_axis_max = x_axis_max
+        self.y_axis_min = y_axis_min
+        self.y_axis_max = y_axis_max
+        self.z_axis_min = z_axis_min
+        self.z_axis_max = z_axis_max
+    
+    def __str__(self) -> str:
+        return f"OperationSpace\n\
+        X Axis : from {self.x_axis_min} to {self.x_axis_max}\n\
+        Y Axis : from {self.y_axis_min} to {self.y_axis_max}\n\
+        Z Axis : from {self.z_axis_min} to {self.z_axis_max}"
+
 
 class DeltaRobot:
     """A class describing a delta robot with three axes (A, B and C) to which move commands can be sent through CAN.
@@ -19,12 +40,24 @@ class DeltaRobot:
         sudo interceptty /dev/ttyACM0 /dev/ttyCAP -v | interceptty-nicedump
         ```
     """
+    DEBUG = True
+    
     def __init__(self, A_axis_id: int, B_axis_id: int, C_axis_id: int, sniff_traffic:bool = False) -> None:
         self.A_axis_id = A_axis_id
         self.B_axis_id = B_axis_id
         self.C_axis_id = C_axis_id
         self._bus = can.interface.Bus(bustype='slcan', channel='/dev/ttyCAP' if sniff_traffic else '/dev/ttyACM0', bitrate=500000)
-        self._notifier = can.Notifier(self._bus, [self._parse_data]) 
+        self._notifier = can.Notifier(self._bus, [self._parse_data])
+
+        # Physical operational space [mm]
+        RADIUS: float = 200    # Radius of the usable range
+        MIN_X = -RADIUS/2
+        MAX_X = RADIUS/2
+        MIN_Y = -RADIUS/2
+        MAX_Y = RADIUS/2
+        MIN_Z = -100.0
+        MAX_Z = -150.0
+        self.operational_space = OperationalSpace(MIN_X, MAX_X,MIN_Y, MAX_Y,MIN_Z, MAX_Z)
 
     def __del__(self) -> None:
         self._notifier.stop()
@@ -64,7 +97,7 @@ class DeltaRobot:
 
         Args:
             axis_id (int): the CAN id a the motor driver board
-            angle (float): the angle to which the motor should go
+            angle (float): the angle in radians to which the motor should go
 
         Returns:
             int: 1 if the command failed, 0 otherwise
@@ -77,9 +110,9 @@ class DeltaRobot:
         """Send a command to the robot to set all axes to a given set of angles.
 
         Args:
-            angle_A (float): the angle to which motor A should go
-            angle_B (float): the angle to which motor B should go
-            angle_C (float): the angle to which motor C should go
+            angle_A (float): the angle in radians to which motor A should go
+            angle_B (float): the angle in radians to which motor B should go
+            angle_C (float): the angle in radians to which motor C should go
 
         Returns:
             int: a bit superposition if the command failed (0b0CBA), 0 otherwise
@@ -90,3 +123,37 @@ class DeltaRobot:
 
         return ret_A + 2*ret_B + 4*ret_C
 
+    def moveBaseToXYZ(self, xyz_coord: tuple[float, float, float]) -> int:
+        """Move the base of the robot to a x,y,z point in the operational space
+
+        Args:
+            xyz_coord (tuple[float, float, float]): a vector discribing the x,y,z position to move to
+
+        Returns:
+            int: a bit superposition if the sending ov the move command failed (0b0CBA), 0 otherwise
+        """
+        angle_A, angle_B, angle_C = self.IGM(xyz_coord)
+        return self.moveAllAxesTo(angle_A, angle_B, angle_C)
+
+    
+    def IGM(self, X_op: tuple[float, float, float]) -> tuple[float, float, float]:
+        Q_art: tuple[float, float, float] = None
+        if DeltaRobot.DEBUG:
+            (x,y,z) = X_op
+            Q_art = [x/100.0, y/100.0, z/100.0]
+        else :
+            # void modeleGeometriqueInverse(TypePointOp X_op, TypePointArt Q_art)
+            DeltaRobot.GM_functions.modeleGeometriqueInverse(X_op, Q_art)
+        
+        return Q_art
+
+    def DGM(self, Q_art: tuple[float, float, float]) -> tuple[float, float, float]:
+        X_op: tuple[float, float, float] = None
+        if DeltaRobot.DEBUG:
+            (x,y,z) = Q_art
+            X_op = [x*100.0, y*100.0, z*100.0]
+        else :
+            # void modeleGeometriqueDirect(TypePointArt Q_art, TypePointOp X_op)
+            DeltaRobot.GM_functions.modeleGeometriqueDirect(Q_art, X_op)
+        
+        return X_op
