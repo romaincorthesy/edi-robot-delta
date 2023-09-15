@@ -41,7 +41,8 @@ def updateCallback(device: IInputDevice) -> None:
     print("updateCallback(device) called")
     global position_text
     position_text = f'Position: {device.x}, {device.y}'
-    if robot.sendMsg(0xc0ffee, [1,2,3,4,5,6,7,8]) != 0:
+    fake_angle = device.x * 100 / DISPLAY_WIDTH
+    if robot.moveAxisTo(robot.A_axis_id, fake_angle) != 0:
         print("Error sending message")
 
 input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
@@ -50,7 +51,7 @@ input_device.callbackUpdate = updateCallback
 
 
 # Output device
-robot = RobotDelta(sniff_traffic=True)
+robot = RobotDelta(A_axis_id=0xC0FFEE, B_axis_id=0xCACA0, C_axis_id=0xC0CA, sniff_traffic=True)
 
 
 running = True
