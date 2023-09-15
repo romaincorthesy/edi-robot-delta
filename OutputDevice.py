@@ -3,16 +3,23 @@
 import can
 import struct 
 
-class RobotDelta:
-    """A class describing a robot with three axes (A, B and C) to which move commands can be sent through CAN.
+class DeltaRobot:
+    """A class describing a delta robot with three axes (A, B and C) to which move commands can be sent through CAN.
+
+    Attributes:
+        A_axis_id (int): the arbitration id of the motor A driver board
+        B_axis_id (int): the arbitration id of the motor B driver board
+        C_axis_id (int): the arbitration id of the motor C driver board
+        sniff_traffic (bool): whether the CAN traffic should be intercepted and shown on /dev/ttyCAP before going to /dev/ttyACM0
     
-    With sniff_traffic=True, first start interceptty in a terminal to sniff the communication:
+    Notes:
+        With sniff_traffic=True, first start interceptty in a terminal to sniff the communication:
     
-    ```Bash
-    sudo interceptty /dev/ttyACM0 /dev/ttyCAP -v | interceptty-nicedump
-    ```
+        ```Bash
+        sudo interceptty /dev/ttyACM0 /dev/ttyCAP -v | interceptty-nicedump
+        ```
     """
-    def __init__(self, A_axis_id: int, B_axis_id: int, C_axis_id: int, sniff_traffic = False) -> None:
+    def __init__(self, A_axis_id: int, B_axis_id: int, C_axis_id: int, sniff_traffic:bool = False) -> None:
         self.A_axis_id = A_axis_id
         self.B_axis_id = B_axis_id
         self.C_axis_id = C_axis_id

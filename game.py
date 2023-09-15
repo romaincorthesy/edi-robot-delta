@@ -5,7 +5,7 @@ import pygame
 from pygame.locals import *
 
 from InputDevice import Touchfoil, Mouse, IInputDevice
-from OutputDevice import RobotDelta
+from OutputDevice import DeltaRobot
 
 
 BLACK = (0, 0, 0)
@@ -18,6 +18,8 @@ DISPLAY_WIDTH: int = 1440
 DISPLAY_HEIGHT: int = 900
 
 def updateScreen() -> None:
+    """Update position text and dot according to current input device position
+    """
     screen.fill(GRAY)
     position_img = font.render(position_text, True, RED)
     position_rect = position_img.get_rect()
@@ -38,6 +40,11 @@ position_text = 'Position here'
 
 # Input device
 def updateCallback(device: IInputDevice) -> None:
+    """Function called when the input device fires a event indicating a new position
+
+    Args:
+        device (IInputDevice): the device itself (should not usually be set)
+    """
     print("updateCallback(device) called")
     global position_text
     position_text = f'Position: {device.x}, {device.y}'
@@ -51,7 +58,7 @@ input_device.callbackUpdate = updateCallback
 
 
 # Output device
-robot = RobotDelta(A_axis_id=0xC0FFEE, B_axis_id=0xCACA0, C_axis_id=0xC0CA, sniff_traffic=True)
+robot = DeltaRobot(A_axis_id=0xC0FFEE, B_axis_id=0xCACA0, C_axis_id=0xC0CA, sniff_traffic=True)
 
 
 running = True
