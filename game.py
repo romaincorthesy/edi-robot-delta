@@ -4,7 +4,7 @@ from ScreenConversion import *
 import pygame
 from pygame.locals import *
 
-from InputDevice import Touchfoil, Mouse
+from InputDevice import Touchfoil, Mouse, IInputDevice
 
 
 BLACK = (0, 0, 0)
@@ -12,10 +12,10 @@ RED = (255, 0, 0)
 GRAY = (200, 200, 200)
 
 # Screen setup
-DISPLAY_WIDTH = 1440
-DISPLAY_HEIGHT = 900
+DISPLAY_WIDTH: int = 1440
+DISPLAY_HEIGHT: int = 900
 
-def updateScreen():
+def updateScreen() -> None:
     screen.fill(GRAY)
     position_img = font.render(position_text, True, RED)
     position_rect = position_img.get_rect()
@@ -31,7 +31,7 @@ font = pygame.font.SysFont(None, 24)
 position_text = 'Position here'
 
 # Input device
-def updateCallback(device):
+def updateCallback(device: IInputDevice) -> None:
     print("updateCallback(device) called")
     global position_text
     position_text = f'Position: {device.x}, {device.y}'
