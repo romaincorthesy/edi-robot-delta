@@ -55,7 +55,7 @@ class Touchfoil(IInputDevice):
         screen_height (int): the height of the display in px. Defaults to 900.
         callbackUpdate (func) : the function to call when the position is updated. Defaults to None.
     """
-    import ScreenConversion as SC
+    import ScaleConversion as SC
 
     def updatePosition(self, x: int, y: int) -> None:
         """Update the position attributes with converted values and then call the update callback if it exists.

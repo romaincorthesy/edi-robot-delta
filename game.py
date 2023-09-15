@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-from ScreenConversion import *
 import pygame
 from pygame.locals import *
 
+import ScaleConversion as SC
 from InputDevice import Touchfoil, Mouse, IInputDevice
 from OutputDevice import DeltaRobot
 
