@@ -63,8 +63,8 @@ def onRobotPositionChanged(pos: tuple[float, float, float]) -> None:
     x, y, z = pos
     print(f"New position: {x}, {y}, {z}")
 
-robot = DeltaRobot(A_axis_id=0xC0FFEE, B_axis_id=0xCACA0, C_axis_id=0xC0CA, \
-                   A_encoder_id=0x1, B_encoder_id=0x2, C_encoder_id=0x3,\
+robot = DeltaRobot(A_axis_id=0xC0FFEE, B_axis_id=0xCACA0, C_axis_id=0xC0CA,
+                   A_encoder_id=0x1, B_encoder_id=0x2, C_encoder_id=0x3,
                    sniff_traffic=False)
 robot.callbackUpdate = onRobotPositionChanged
 

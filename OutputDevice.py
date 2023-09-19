@@ -2,7 +2,7 @@
 
 import can
 import struct
-from ctypes import CDLL
+import GM_functions
 from pprint import pprint
 
 
@@ -41,7 +41,7 @@ class DeltaRobot:
         sudo interceptty /dev/ttyACM0 /dev/ttyCAP -v | interceptty-nicedump
         ```
     """
-    DEBUG = True
+    DEBUG = False
     
     def __init__(self, A_axis_id: int, B_axis_id: int, C_axis_id: int, A_encoder_id: int, B_encoder_id: int, C_encoder_id: int, sniff_traffic:bool = False) -> None:
         self.A_axis_id = A_axis_id
@@ -55,14 +55,14 @@ class DeltaRobot:
         self.callbackUpdate = None
         self._current_angles = [None, None, None]
 
-        # Physical operational space [mm]
-        RADIUS: float = 200    # Radius of the usable range
+        # Physical operational space [m]
+        RADIUS: float = 0.200    # Radius of the usable range
         MIN_X = -RADIUS/2
         MAX_X = RADIUS/2
         MIN_Y = -RADIUS/2
         MAX_Y = RADIUS/2
-        MIN_Z = -100.0
-        MAX_Z = -150.0
+        MIN_Z = -0.100
+        MAX_Z = -0.150
         self.operational_space = OperationalSpace(MIN_X, MAX_X,MIN_Y, MAX_Y,MIN_Z, MAX_Z)
 
     def __del__(self) -> None:
@@ -176,9 +176,10 @@ class DeltaRobot:
         if DeltaRobot.DEBUG:
             (x,y,z) = X_op
             Q_art = [x/100.0, y/100.0, z/100.0]
-        else :
-            # void modeleGeometriqueInverse(TypePointOp X_op, TypePointArt Q_art)
-            DeltaRobot.GM_functions.modeleGeometriqueInverse(X_op, Q_art)
+        else:
+            Q_art, err = GM_functions.Rot_Inv_Geometric_Model(X_op)
+            if err != 0:
+                raise ArithmeticError(f"Rot_Inv_Geometric_Model returned error number {err}")
         
         return Q_art
 
@@ -187,8 +188,9 @@ class DeltaRobot:
         if DeltaRobot.DEBUG:
             (x,y,z) = Q_art
             X_op = [x*100.0, y*100.0, z*100.0]
-        else :
-            # void modeleGeometriqueDirect(TypePointArt Q_art, TypePointOp X_op)
-            DeltaRobot.GM_functions.modeleGeometriqueDirect(Q_art, X_op)
+        else:
+            X_op, err = GM_functions.Rot_Dir_Geometric_Model(Q_art)
+            if err != 0:
+                raise ArithmeticError(f"Rot_Dir_Geometric_Model returned error number {err}")
         
         return X_op
