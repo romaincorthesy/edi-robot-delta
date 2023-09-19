@@ -3,6 +3,7 @@
 import can
 import struct
 from ctypes import CDLL
+from pprint import pprint
 
 
 class OperationalSpace:
@@ -42,12 +43,17 @@ class DeltaRobot:
     """
     DEBUG = True
     
-    def __init__(self, A_axis_id: int, B_axis_id: int, C_axis_id: int, sniff_traffic:bool = False) -> None:
+    def __init__(self, A_axis_id: int, B_axis_id: int, C_axis_id: int, A_encoder_id: int, B_encoder_id: int, C_encoder_id: int, sniff_traffic:bool = False) -> None:
         self.A_axis_id = A_axis_id
         self.B_axis_id = B_axis_id
         self.C_axis_id = C_axis_id
+        self.A_encoder_id = A_encoder_id
+        self.B_encoder_id = B_encoder_id
+        self.C_encoder_id = C_encoder_id
         self._bus = can.interface.Bus(bustype='slcan', channel='/dev/ttyCAP' if sniff_traffic else '/dev/ttyACM0', bitrate=500000)
         self._notifier = can.Notifier(self._bus, [self._parse_data])
+        self.callbackUpdate = None
+        self._current_angles = [None, None, None]
 
         # Physical operational space [mm]
         RADIUS: float = 200    # Radius of the usable range
@@ -63,8 +69,37 @@ class DeltaRobot:
         self._notifier.stop()
         self._bus.shutdown()
 
-    def _parse_data(self, can: can) -> None:
-        print(can.Message)
+    def _parse_data(self, msg: can.Message) -> None:
+        """Parse incoming CAN message and update current angles and call the callback if it exists.
+
+        Args:
+            msg (can.Message): CAN message containing a new value for an angle
+
+        Raises:
+            can.CanOperationError: if the message arbitration id is not one of the angles.
+        """
+        try:
+            pprint(msg)
+            id = msg.arbitration_id
+            angle = struct.unpack('d', msg.data)[0]
+            if id == self.A_encoder_id:
+                self._current_angles[0] = angle
+            elif id == self.B_encoder_id:
+                self._current_angles[1] = angle
+            elif id == self.C_encoder_id:
+                self._current_angles[2] = angle
+            else:
+                print(f"Arbitration id options are:\n\t{self.A_encoder_id}\n\t{self.B_encoder_id}\n\t{self.C_encoder_id}")
+                raise can.CanOperationError(f"Received message with unknown arbitration id: {id}")
+        except Exception as e:
+            print("Error in _parse_data: {e}")
+            raise e
+
+        if not None in self._current_angles:
+            new_position = self.DGM(self._current_angles)
+            
+            if self.callbackUpdate is not None:
+                self.callbackUpdate(new_position)
 
     def _sendMsg(self, dest_id: int, data: bytearray) -> int:
         """Send a CAN message to a motor driver board

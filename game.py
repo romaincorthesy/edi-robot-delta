@@ -53,13 +53,20 @@ def updateCallback(device: IInputDevice) -> None:
     if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
         print("Error sending message")
 
-input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
-# input_device = Mouse(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
+# input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
+input_device = Mouse(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
 input_device.callbackUpdate = updateCallback
 
 
 # Output device
-robot = DeltaRobot(A_axis_id=0xC0FFEE, B_axis_id=0xCACA0, C_axis_id=0xC0CA, sniff_traffic=True)
+def onRobotPositionChanged(pos: tuple[float, float, float]) -> None:
+    x, y, z = pos
+    print(f"New position: {x}, {y}, {z}")
+
+robot = DeltaRobot(A_axis_id=0xC0FFEE, B_axis_id=0xCACA0, C_axis_id=0xC0CA, \
+                   A_encoder_id=0x1, B_encoder_id=0x2, C_encoder_id=0x3,\
+                   sniff_traffic=False)
+robot.callbackUpdate = onRobotPositionChanged
 
 def screenToRobot(input_device: IInputDevice, robot: DeltaRobot) -> tuple[float, float]:
     x = SC.remap(0, input_device.screen_width, robot.operational_space.x_axis_min, robot.operational_space.x_axis_max, input_device.x)
