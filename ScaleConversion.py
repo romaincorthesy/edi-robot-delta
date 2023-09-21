@@ -1,4 +1,7 @@
 # Source github user: laundmo (https://gist.github.com/laundmo/b224b1f4c8ef6ca5fe47e132c8deab56)
+from functools import cache
+
+@cache
 def lerp(a: float, b: float, t: float) -> float:
     """Linear interpolate on the scale given by a to b, using t as the point on that scale.
 
@@ -16,7 +19,7 @@ def lerp(a: float, b: float, t: float) -> float:
     """
     return (1 - t) * a + t * b
 
-
+@cache
 def inv_lerp(a: float, b: float, v: float) -> float:
     """Inverse Linar Interpolation, get the fraction between a and b on which v resides.
 
@@ -34,7 +37,7 @@ def inv_lerp(a: float, b: float, v: float) -> float:
     """
     return (v - a) / (b - a)
 
-
+@cache
 def remap(i_min: float, i_max: float, o_min: float, o_max: float, v: float) -> float:
     """Remap values from one linear scale to another, a combination of lerp and inv_lerp.
 

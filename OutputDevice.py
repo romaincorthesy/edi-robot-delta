@@ -42,8 +42,7 @@ class DeltaRobot:
         ```
     """
     DEBUG = False
-    
-    def __init__(self, A_axis_id: int, B_axis_id: int, C_axis_id: int, A_encoder_id: int, B_encoder_id: int, C_encoder_id: int, sniff_traffic:bool = False) -> None:
+    GM_PRECISION = 3
         self.A_axis_id = A_axis_id
         self.B_axis_id = B_axis_id
         self.C_axis_id = C_axis_id
@@ -173,24 +172,31 @@ class DeltaRobot:
     
     def IGM(self, X_op: tuple[float, float, float]) -> tuple[float, float, float]:
         Q_art: tuple[float, float, float] = None
+        X_op_rounded = tuple([round(x, DeltaRobot.GM_PRECISION) for x in X_op])
         if DeltaRobot.DEBUG:
-            (x,y,z) = X_op
+            (x, y, z) = X_op_rounded
             Q_art = [x/100.0, y/100.0, z/100.0]
         else:
-            Q_art, err = GM_functions.Rot_Inv_Geometric_Model(X_op)
+            Q_art, err = GM_functions.Rot_Inv_Geometric_Model(X_op_rounded)
             if err != 0:
-                raise ArithmeticError(f"Rot_Inv_Geometric_Model returned error number {err}")
-        
+                raise ArithmeticError(
+                    f"Rot_Inv_Geometric_Model returned error number {err}")
+            Q_art = [round(q, DeltaRobot.GM_PRECISION) for q in Q_art]
+
         return Q_art
 
     def DGM(self, Q_art: tuple[float, float, float]) -> tuple[float, float, float]:
         X_op: tuple[float, float, float] = None
+        Q_art_rounded = tuple(
+            [round(q, DeltaRobot.GM_PRECISION) for q in Q_art])
         if DeltaRobot.DEBUG:
-            (x,y,z) = Q_art
+            (x, y, z) = Q_art_rounded
             X_op = [x*100.0, y*100.0, z*100.0]
         else:
-            X_op, err = GM_functions.Rot_Dir_Geometric_Model(Q_art)
+            X_op, err = GM_functions.Rot_Dir_Geometric_Model(Q_art_rounded)
             if err != 0:
-                raise ArithmeticError(f"Rot_Dir_Geometric_Model returned error number {err}")
-        
+                raise ArithmeticError(
+                    f"Rot_Dir_Geometric_Model returned error number {err}")
+            X_op = [round(x, DeltaRobot.GM_PRECISION) for x in X_op]
+
         return X_op
