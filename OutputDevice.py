@@ -17,7 +17,7 @@ class OperationalSpace:
         self.y_axis_max = y_axis_max
         self.z_axis_min = z_axis_min
         self.z_axis_max = z_axis_max
-    
+
     def __str__(self) -> str:
         return f"OperationSpace\n\
         X Axis : from {self.x_axis_min} to {self.x_axis_max}\n\
@@ -33,26 +33,35 @@ class DeltaRobot:
         B_axis_id (int): the arbitration id of the motor B driver board
         C_axis_id (int): the arbitration id of the motor C driver board
         sniff_traffic (bool): whether the CAN traffic should be intercepted and shown on /dev/ttyCAP before going to /dev/ttyACM0
-    
+
     Notes:
         With sniff_traffic=True, first start interceptty in a terminal to sniff the communication:
-    
+
         ```Bash
         sudo interceptty /dev/ttyACM0 /dev/ttyCAP -v | interceptty-nicedump
         ```
     """
     DEBUG = False
     GM_PRECISION = 3
+
+    def __init__(self, A_axis_id: int, B_axis_id: int, C_axis_id: int, A_encoder_id: int, B_encoder_id: int, C_encoder_id: int, sniff_traffic: bool = False) -> None:
         self.A_axis_id = A_axis_id
         self.B_axis_id = B_axis_id
         self.C_axis_id = C_axis_id
         self.A_encoder_id = A_encoder_id
         self.B_encoder_id = B_encoder_id
         self.C_encoder_id = C_encoder_id
-        self._bus = can.interface.Bus(bustype='slcan', channel='/dev/ttyCAP' if sniff_traffic else '/dev/ttyACM0', bitrate=500000)
+        self._bus = can.interface.Bus(
+            bustype='slcan', channel='/dev/ttyCAP' if sniff_traffic else '/dev/ttyACM0', bitrate=500000)
         self._notifier = can.Notifier(self._bus, [self._parse_data])
         self.callbackUpdate = None
         self._current_angles = [None, None, None]
+        self._new_A_received = False
+        self._new_B_received = False
+        self._new_C_received = False
+        self.x = None
+        self.y = None
+        self.z = None
 
         # Physical operational space [m]
         RADIUS: float = 0.200    # Radius of the usable range
@@ -62,7 +71,8 @@ class DeltaRobot:
         MAX_Y = RADIUS/2
         MIN_Z = -0.100
         MAX_Z = -0.150
-        self.operational_space = OperationalSpace(MIN_X, MAX_X,MIN_Y, MAX_Y,MIN_Z, MAX_Z)
+        self.operational_space = OperationalSpace(
+            MIN_X, MAX_X, MIN_Y, MAX_Y, MIN_Z, MAX_Z)
 
     def __del__(self) -> None:
         self._notifier.stop()
@@ -78,25 +88,39 @@ class DeltaRobot:
             can.CanOperationError: if the message arbitration id is not one of the angles.
         """
         try:
-            pprint(msg)
+            # pprint(msg)
             id = msg.arbitration_id
             angle = struct.unpack('d', msg.data)[0]
             if id == self.A_encoder_id:
                 self._current_angles[0] = angle
+                self._new_A_received = True
+                print("New A received")
             elif id == self.B_encoder_id:
                 self._current_angles[1] = angle
+                self._new_B_received = True
+                print("New B received")
             elif id == self.C_encoder_id:
                 self._current_angles[2] = angle
+                self._new_C_received = True
+                print("New C received")
             else:
-                print(f"Arbitration id options are:\n\t{self.A_encoder_id}\n\t{self.B_encoder_id}\n\t{self.C_encoder_id}")
-                raise can.CanOperationError(f"Received message with unknown arbitration id: {id}")
+                print(
+                    f"Arbitration id options are:\n\t{self.A_encoder_id}\n\t{self.B_encoder_id}\n\t{self.C_encoder_id}")
+                raise can.CanOperationError(
+                    f"Received message with unknown arbitration id: {id}")
         except Exception as e:
             print("Error in _parse_data: {e}")
             raise e
 
+        # and self._new_A_received and self._new_B_received and self._new_C_received:
         if not None in self._current_angles:
+            self._new_A_received = False
+            self._new_B_received = False
+            self._new_C_received = False
             new_position = self.DGM(self._current_angles)
-            
+
+            self.x, self.y, self.z = new_position
+
             if self.callbackUpdate is not None:
                 self.callbackUpdate(new_position)
 
@@ -109,21 +133,21 @@ class DeltaRobot:
 
         Returns:
             int: 1 if the message could not be sent, 0 otherwise
-        """        
+        """
         msg = can.Message(arbitration_id=dest_id,
-                    data=data,
-                    is_extended_id=True,
-                    check=True)
+                          data=data,
+                          is_extended_id=True,
+                          check=True)
 
         try:
             self._bus.send(msg)
-            print("Message sent on {}".format(self._bus.channel_info))
+            # print("Message sent on {}".format(self._bus.channel_info))
             return 0
         except can.CanError:
             print("Message NOT sent")
             return 1
         except Exception as e:
-            print("Unknown error : "  + e)
+            print("Unknown error : " + e)
             raise
 
     def moveAxisTo(self, axis_id: int, angle: float) -> int:
@@ -136,10 +160,10 @@ class DeltaRobot:
         Returns:
             int: 1 if the command failed, 0 otherwise
         """
-        ba = bytearray(struct.pack("d", angle)) # Using double : 8 bytes
-        print(f"{ba.hex(':')} ({angle})") # Prints as '40:45:35:c2:8f:5c:28:f6 (42.420000)'
+        ba = bytearray(struct.pack("d", angle))  # Using double : 8 bytes
+        # print(f"{ba.hex(':')} ({angle})") # Prints as '40:45:35:c2:8f:5c:28:f6 (42.420000)'
         return self._sendMsg(axis_id, ba)
-    
+
     def moveAllAxesTo(self, angle_A: float, angle_B: float, angle_C: float) -> int:
         """Send a command to the robot to set all axes to a given set of angles.
 
@@ -169,7 +193,6 @@ class DeltaRobot:
         angle_A, angle_B, angle_C = self.IGM(xyz_coord)
         return self.moveAllAxesTo(angle_A, angle_B, angle_C)
 
-    
     def IGM(self, X_op: tuple[float, float, float]) -> tuple[float, float, float]:
         Q_art: tuple[float, float, float] = None
         X_op_rounded = tuple([round(x, DeltaRobot.GM_PRECISION) for x in X_op])
