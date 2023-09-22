@@ -94,15 +94,15 @@ class DeltaRobot:
             if id == self.A_encoder_id:
                 self._current_angles[0] = angle
                 self._new_A_received = True
-                print("New A received")
+                # print("New A received")
             elif id == self.B_encoder_id:
                 self._current_angles[1] = angle
                 self._new_B_received = True
-                print("New B received")
+                # print("New B received")
             elif id == self.C_encoder_id:
                 self._current_angles[2] = angle
                 self._new_C_received = True
-                print("New C received")
+                # print("New C received")
             else:
                 print(
                     f"Arbitration id options are:\n\t{self.A_encoder_id}\n\t{self.B_encoder_id}\n\t{self.C_encoder_id}")

@@ -2,6 +2,8 @@
 
 import pygame
 from pygame.locals import *
+from time import time_ns
+from math import sqrt
 
 import ScaleConversion as SC
 from InputDevice import Touchfoil, Mouse, IInputDevice
@@ -17,9 +19,23 @@ GRAY = (200, 200, 200)
 DISPLAY_WIDTH: int = 1440
 DISPLAY_HEIGHT: int = 900
 
+# User screen position setup
 USER_DIFF_THRESHOLD: int = 5
 user_x: int = 0
 user_y: int = 0
+
+# Robot screen position setup
+robot_x: int = 0
+robot_y: int = 0
+FAKE_ROBOT_DELAY_MS: int = 100
+last_time_ns: int = time_ns()
+
+
+def drawText(text: str, topleft: tuple[int, int], color: tuple[int, int, int]):
+    img = font.render(text, True, color)
+    rect = img.get_rect()
+    rect.topleft = topleft
+    screen.blit(img, rect)
 
 
 def updateScreen() -> None:
@@ -27,20 +43,14 @@ def updateScreen() -> None:
     """
     screen.fill(GRAY)
 
-    input_position_img = font.render(input_position_text, True, BLACK)
-    input_position_rect = input_position_img.get_rect()
-    input_position_rect.topleft = (20, 20)
-    screen.blit(input_position_img, input_position_rect)
-    if input_device.x is not None and input_device.y is not None:
-        pygame.draw.circle(screen, BLACK, (input_device.x, input_device.y), 3)
+    drawText(f'Robot: {robot_x}, {robot_y}', (20, 50), RED)
+    pygame.draw.circle(screen, RED, (robot_x, robot_y), 6)
 
-    robot_position_img = font.render(robot_position_text, True, RED)
-    robot_position_rect = robot_position_img.get_rect()
-    robot_position_rect.topleft = (20, 50)
-    screen.blit(robot_position_img, robot_position_rect)
-    if robot.x is not None and robot.y is not None:
-        x, y = robotToScreen(robot, input_device)
-        pygame.draw.circle(screen, RED, (int(x), int(y)), 6)
+    drawText(f'User: {user_x}, {user_y}', (20, 20), BLACK)
+    pygame.draw.circle(screen, BLACK, (user_x, user_y), 3)
+
+    if winner == "user":
+        userWon()
 
     pygame.display.update()
 
@@ -52,8 +62,10 @@ pygame.init()
 screen = pygame.display.set_mode((DISPLAY_WIDTH, DISPLAY_HEIGHT))
 pygame.display.toggle_fullscreen()
 font = pygame.font.SysFont(None, 24)
-input_position_text = 'Position here'
-robot_position_text = 'Position here'
+
+user_robot_d_pos: float = 0
+DELTA_POSITION_THRESHOLD: int = 150
+winner = ""
 
 
 # Input device
@@ -63,17 +75,28 @@ def updateCallback(device: IInputDevice) -> None:
     Args:
         device (IInputDevice): the device itself (should not usually be set)
     """
-    global user_x, user_y
+    global user_x, user_y, robot_x, robot_y, user_robot_d_pos, winner, last_time_ns
+
+    # Update user-robot position error
+    dx = user_x - robot_x
+    dy = user_y - robot_y
+    dxy = sqrt(dx*dx + dy*dy)
+    if dxy > DELTA_POSITION_THRESHOLD:
+        # User wins against robot
+        winner = "user"
+
+    # Fake robot movement
+    if time_ns()-last_time_ns > FAKE_ROBOT_DELAY_MS*1_000_000:
+        robot_x = device.x
+        robot_y = device.y
+        last_time_ns = time_ns()
+
     if abs(device.x - user_x) > USER_DIFF_THRESHOLD or abs(device.y - user_y) > USER_DIFF_THRESHOLD:
-        print(
-            f"x: {device.x} - {user_x} = {device.x - user_x}  y: {device.y} - {user_y} = {device.y - user_y}")
+        # print(f"x: {device.x} - {user_x} = {device.x - user_x}  y: {device.y} - {user_y} = {device.y - user_y}")
         user_x = device.x
         user_y = device.y
 
         # print("updateCallback(device) called")
-        global input_position_text
-        input_position_text = f'User: {device.x}, {device.y}'
-
         x, y = screenToRobot(input_device, robot)
         if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
             print("Error sending message")
@@ -89,15 +112,14 @@ def onRobotPositionChanged(pos: tuple[float, float, float]) -> None:
     x, y, z = pos
     print(f"New position: {x}, {y}, {z}")
 
-    x_screen, y_screen = robotToScreen(robot, input_device)
-    global robot_position_text
-    robot_position_text = f'Robot: {int(x_screen)}, {int(y_screen)}'
+    global robot_x, robot_y
+    robot_x, robot_y = robotToScreen(robot, input_device)
 
 
 robot = DeltaRobot(A_axis_id=0x1, B_axis_id=0x2, C_axis_id=0x3,
                    A_encoder_id=0x1, B_encoder_id=0x2, C_encoder_id=0x3,
-                   sniff_traffic=True)
-robot.callbackUpdate = onRobotPositionChanged
+                   sniff_traffic=False)
+# robot.callbackUpdate = onRobotPositionChanged
 
 
 def screenToRobot(input_device: IInputDevice, robot: DeltaRobot) -> tuple[float, float]:
@@ -116,6 +138,10 @@ def robotToScreen(robot: DeltaRobot, input_device: IInputDevice) -> tuple[float,
                  robot.operational_space.y_axis_max, 0, input_device.screen_height, robot.y)
 
     return (x, y)
+
+
+def userWon() -> None:
+    drawText('Vous avez gagné !', (700, 450), BLACK)
 
 
 running = True
