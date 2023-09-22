@@ -4,6 +4,8 @@ import pygame
 from pygame.locals import *
 from time import time_ns
 from math import sqrt
+from enum import Enum
+import json
 
 import ScaleConversion as SC
 from InputDevice import Touchfoil, Mouse, IInputDevice
@@ -28,6 +30,11 @@ robot_x: int = 0
 robot_y: int = 0
 FAKE_ROBOT_DELAY_MS: int = 100
 last_time_ns: int = time_ns()
+
+
+class GameMode(Enum):
+    USER_FOLLOWS = 1
+    ROBOT_FOLLOWS = 2
 
 
 def drawText(text: str, topleft: tuple[int, int], color: tuple[int, int, int]):
@@ -57,6 +64,8 @@ def updateScreen() -> None:
 
     if winner == "user":
         userWon()
+    elif winner == "robot":
+        robotWon()
 
     pygame.display.update()
 
@@ -71,6 +80,10 @@ font = pygame.font.SysFont(None, 24)
 
 DELTA_POSITION_THRESHOLD: int = 150
 winner = ""
+game_mode: GameMode = GameMode.USER_FOLLOWS
+current_speed: float = 1.0
+dxy = 0.0
+i = 0
 
 
 # Input device
@@ -80,32 +93,30 @@ def updateCallback(device: IInputDevice) -> None:
     Args:
         device (IInputDevice): the device itself (should not usually be set)
     """
-    global user_x, user_y, robot_x, robot_y, winner, last_time_ns
+    print("callback input")
 
-    # Update user-robot position error
-    dx = user_x - robot_x
-    dy = user_y - robot_y
-    dxy = sqrt(dx*dx + dy*dy)
-    if dxy > DELTA_POSITION_THRESHOLD:
-        # User wins against robot
-        winner = "user"
+    global user_x, user_y, robot_x, robot_y, winner, last_time_ns, dxy
 
-    # Fake robot movement
-    if time_ns()-last_time_ns > FAKE_ROBOT_DELAY_MS*1_000_000:
-        robot_x = device.x
-        robot_y = device.y
-        last_time_ns = time_ns()
+    if game_mode == GameMode.ROBOT_FOLLOWS:
+        if dxy > DELTA_POSITION_THRESHOLD:
+            # User wins against robot
+            winner = "user"
 
-    # Only send a new position message through CAN if the input position has moved enough
-    if abs(device.x - user_x) > USER_DIFF_THRESHOLD or abs(device.y - user_y) > USER_DIFF_THRESHOLD:
-        # print(f"x: {device.x} - {user_x} = {device.x - user_x}  y: {device.y} - {user_y} = {device.y - user_y}")
-        user_x = device.x
-        user_y = device.y
+        # Fake robot movement with delay
+        if time_ns() - last_time_ns > FAKE_ROBOT_DELAY_MS*1_000_000:
+            robot_x = device.x
+            robot_y = device.y
+            last_time_ns = time_ns()
 
-        # print("updateCallback(device) called")
-        x, y = screenToRobot(input_device, robot)
-        if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
-            print("Error sending message")
+        # Only send a new position message through CAN if the input position has moved enough
+        if abs(device.x - user_x) > USER_DIFF_THRESHOLD or abs(device.y - user_y) > USER_DIFF_THRESHOLD:
+            # print(f"x: {device.x} - {user_x} = {device.x - user_x}  y: {device.y} - {user_y} = {device.y - user_y}")
+            user_x = device.x
+            user_y = device.y
+
+            x, y = screenToRobot(input_device, robot)
+            if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
+                print("Error sending message")
 
 
 # input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
@@ -118,7 +129,7 @@ def onRobotPositionChanged(pos: tuple[float, float, float]) -> None:
     """Function called when the robot's encoder position has changed
 
     Args:
-        pos (tuple[float, float, float]): the new x,y,z position in the robot operationnal space
+        pos (tuple[float, float, float]): the new x,y,z position in the robot operational space
     """
     x, y, z = pos
     print(f"New position: {x}, {y}, {z}")
@@ -133,7 +144,7 @@ robot = DeltaRobot(A_motor_id=0x1, B_motor_id=0x2, C_motor_id=0x3,
 # robot.callbackUpdate = onRobotPositionChanged
 
 
-def screenToRobot(input_device: IInputDevice, robot: DeltaRobot) -> tuple[float, float]:
+def screenToRobot(input_device: IInputDevice, robot: DeltaRobot, force_value: tuple[int, int] = None) -> tuple[float, float]:
     """Convert from screen to robot coordinate system. 
 
     Args:
@@ -143,10 +154,16 @@ def screenToRobot(input_device: IInputDevice, robot: DeltaRobot) -> tuple[float,
     Returns:
         tuple[float, float]: a pair x,y in the robot's coordinate system
     """
+    if force_value != None:
+        x_in = force_value[0]
+        y_in = force_value[1]
+    else:
+        x_in = input_device.x
+        y_in = input_device.y
     x = SC.remap(0, input_device.screen_width, robot.operational_space.x_axis_min,
-                 robot.operational_space.x_axis_max, input_device.x)
+                 robot.operational_space.x_axis_max, x_in)
     y = SC.remap(0, input_device.screen_height, robot.operational_space.y_axis_min,
-                 robot.operational_space.y_axis_max, input_device.y)
+                 robot.operational_space.y_axis_max, y_in)
 
     return (x, y)
 
@@ -174,6 +191,21 @@ def userWon() -> None:
     drawText('Vous avez gagné !', (700, 450), BLACK)
 
 
+def robotWon() -> None:
+    """Called when the robot has outsped the user"""
+    drawText('Vous avez perdu ! Vous êtes trop lent', (700, 450), BLACK)
+
+
+# Load robot movement path
+path = []
+with open("./path.json") as f:
+    path = json.load(f)
+
+
+def getPathPoint(path, i):
+    return (path[i][0] + DISPLAY_WIDTH // 2, path[i][1] + DISPLAY_HEIGHT // 2)
+
+
 # Main loop
 running = True
 while running:
@@ -191,6 +223,29 @@ while running:
             x, y = pygame.mouse.get_pos()
             input_device.updatePosition(x, y)
 
+    # Update user-robot position error
+    dx = user_x - robot_x
+    dy = user_y - robot_y
+    dxy = sqrt(dx*dx + dy*dy)
+
+    if game_mode == GameMode.USER_FOLLOWS:
+        if dxy > DELTA_POSITION_THRESHOLD:
+            # Robot wins against user
+            winner = "robot"
+
+        if time_ns() - last_time_ns > 1_000_000_000*current_speed:
+            robot_x, robot_y = getPathPoint(path, i)
+            print(f"New point: {robot_x}, {robot_y}")
+            x, y = screenToRobot(input_device, robot, (robot_x, robot_y))
+
+            if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
+                print("Error sending message")
+
+            i += 1
+            i %= len(path)
+            if current_speed > 0.02:
+                current_speed -= 0.02
+            last_time_ns = time_ns()
     updateScreen()
 
 pygame.quit()
