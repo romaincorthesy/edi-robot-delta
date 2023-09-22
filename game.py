@@ -7,13 +7,12 @@ from math import sqrt
 
 import ScaleConversion as SC
 from InputDevice import Touchfoil, Mouse, IInputDevice
-from OutputDevice import DeltaRobot, OperationalSpace
+from OutputDevice import DeltaRobot
 
-
+# Color constants
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GRAY = (200, 200, 200)
-
 
 # Screen setup
 DISPLAY_WIDTH: int = 1440
@@ -32,6 +31,13 @@ last_time_ns: int = time_ns()
 
 
 def drawText(text: str, topleft: tuple[int, int], color: tuple[int, int, int]):
+    """Add a text on the screen. pygame.display.update() must be called after.
+
+    Args:
+        text (str): text to display
+        topleft (tuple[int, int]): top left corner position
+        color (tuple[int, int, int]): RVB description of a color
+    """
     img = font.render(text, True, color)
     rect = img.get_rect()
     rect.topleft = topleft
@@ -63,7 +69,6 @@ screen = pygame.display.set_mode((DISPLAY_WIDTH, DISPLAY_HEIGHT))
 pygame.display.toggle_fullscreen()
 font = pygame.font.SysFont(None, 24)
 
-user_robot_d_pos: float = 0
 DELTA_POSITION_THRESHOLD: int = 150
 winner = ""
 
@@ -75,7 +80,7 @@ def updateCallback(device: IInputDevice) -> None:
     Args:
         device (IInputDevice): the device itself (should not usually be set)
     """
-    global user_x, user_y, robot_x, robot_y, user_robot_d_pos, winner, last_time_ns
+    global user_x, user_y, robot_x, robot_y, winner, last_time_ns
 
     # Update user-robot position error
     dx = user_x - robot_x
@@ -91,6 +96,7 @@ def updateCallback(device: IInputDevice) -> None:
         robot_y = device.y
         last_time_ns = time_ns()
 
+    # Only send a new position message through CAN if the input position has moved enough
     if abs(device.x - user_x) > USER_DIFF_THRESHOLD or abs(device.y - user_y) > USER_DIFF_THRESHOLD:
         # print(f"x: {device.x} - {user_x} = {device.x - user_x}  y: {device.y} - {user_y} = {device.y - user_y}")
         user_x = device.x
@@ -109,6 +115,11 @@ input_device.callbackUpdate = updateCallback
 
 # Output device
 def onRobotPositionChanged(pos: tuple[float, float, float]) -> None:
+    """Function called when the robot's encoder position has changed
+
+    Args:
+        pos (tuple[float, float, float]): the new x,y,z position in the robot operationnal space
+    """
     x, y, z = pos
     print(f"New position: {x}, {y}, {z}")
 
@@ -116,13 +127,22 @@ def onRobotPositionChanged(pos: tuple[float, float, float]) -> None:
     robot_x, robot_y = robotToScreen(robot, input_device)
 
 
-robot = DeltaRobot(A_axis_id=0x1, B_axis_id=0x2, C_axis_id=0x3,
+robot = DeltaRobot(A_motor_id=0x1, B_motor_id=0x2, C_motor_id=0x3,
                    A_encoder_id=0x1, B_encoder_id=0x2, C_encoder_id=0x3,
                    sniff_traffic=False)
 # robot.callbackUpdate = onRobotPositionChanged
 
 
 def screenToRobot(input_device: IInputDevice, robot: DeltaRobot) -> tuple[float, float]:
+    """Convert from screen to robot coordinate system. 
+
+    Args:
+        input_device (IInputDevice): an input device from which to convert the x and y properties
+        robot (DeltaRobot): a robot with an operational space to convert to
+
+    Returns:
+        tuple[float, float]: a pair x,y in the robot's coordinate system
+    """
     x = SC.remap(0, input_device.screen_width, robot.operational_space.x_axis_min,
                  robot.operational_space.x_axis_max, input_device.x)
     y = SC.remap(0, input_device.screen_height, robot.operational_space.y_axis_min,
@@ -132,6 +152,15 @@ def screenToRobot(input_device: IInputDevice, robot: DeltaRobot) -> tuple[float,
 
 
 def robotToScreen(robot: DeltaRobot, input_device: IInputDevice) -> tuple[float, float]:
+    """Convert from robot to screen coordinate system.
+
+    Args:
+        robot (DeltaRobot): a robot from which to convert the x and y properties
+        input_device (IInputDevice): an input device with a screen width and height to convert to
+
+    Returns:
+        tuple[float, float]: a x,y pair in the screen space
+    """
     x = SC.remap(robot.operational_space.x_axis_min,
                  robot.operational_space.x_axis_max, 0, input_device.screen_width, robot.x)
     y = SC.remap(robot.operational_space.y_axis_min,
@@ -141,9 +170,11 @@ def robotToScreen(robot: DeltaRobot, input_device: IInputDevice) -> tuple[float,
 
 
 def userWon() -> None:
+    """Called when the user has outsped the robot"""
     drawText('Vous avez gagné !', (700, 450), BLACK)
 
 
+# Main loop
 running = True
 while running:
     for event in pygame.event.get():

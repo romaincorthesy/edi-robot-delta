@@ -2,11 +2,13 @@
 
 import can
 import struct
-import GM_functions
-from pprint import pprint
+import GM_functions as GM
 
 
 class OperationalSpace:
+    """A class describing a cartesian coordinate system with axes limits.
+    """
+
     def __init__(self,
                  x_axis_min: float, x_axis_max: float,
                  y_axis_min: float, y_axis_max: float,
@@ -19,19 +21,19 @@ class OperationalSpace:
         self.z_axis_max = z_axis_max
 
     def __str__(self) -> str:
-        return f"OperationSpace\n\
-        X Axis : from {self.x_axis_min} to {self.x_axis_max}\n\
-        Y Axis : from {self.y_axis_min} to {self.y_axis_max}\n\
-        Z Axis : from {self.z_axis_min} to {self.z_axis_max}"
+        return f"Operational space\n\
+        X Axis : from {self.x_axis_min}m to {self.x_axis_max}m\n\
+        Y Axis : from {self.y_axis_min}m to {self.y_axis_max}m\n\
+        Z Axis : from {self.z_axis_min}m to {self.z_axis_max}m"
 
 
 class DeltaRobot:
-    """A class describing a delta robot with three axes (A, B and C) to which move commands can be sent through CAN.
+    """A class describing a delta robot with three motor-encoer (A, B and C) to which move commands can be sent through CAN.
 
     Attributes:
-        A_axis_id (int): the arbitration id of the motor A driver board
-        B_axis_id (int): the arbitration id of the motor B driver board
-        C_axis_id (int): the arbitration id of the motor C driver board
+        A_motor_id (int): the arbitration id of the motor A driver board
+        B_motor_id (int): the arbitration id of the motor B driver board
+        C_motor_id (int): the arbitration id of the motor C driver board
         sniff_traffic (bool): whether the CAN traffic should be intercepted and shown on /dev/ttyCAP before going to /dev/ttyACM0
 
     Notes:
@@ -42,26 +44,25 @@ class DeltaRobot:
         ```
     """
     DEBUG = False
-    GM_PRECISION = 3
 
-    def __init__(self, A_axis_id: int, B_axis_id: int, C_axis_id: int, A_encoder_id: int, B_encoder_id: int, C_encoder_id: int, sniff_traffic: bool = False) -> None:
-        self.A_axis_id = A_axis_id
-        self.B_axis_id = B_axis_id
-        self.C_axis_id = C_axis_id
+    def __init__(self, A_motor_id: int, B_motor_id: int, C_motor_id: int, A_encoder_id: int, B_encoder_id: int, C_encoder_id: int, sniff_traffic: bool = False) -> None:
+        self.A_motor_id = A_motor_id
+        self.B_motor_id = B_motor_id
+        self.C_motor_id = C_motor_id
         self.A_encoder_id = A_encoder_id
         self.B_encoder_id = B_encoder_id
         self.C_encoder_id = C_encoder_id
+
+        # Updated when a new CAN message is received
+        self._angles = [None, None, None]
+        self.x = None
+        self.y = None
+        self.z = None
+
         self._bus = can.interface.Bus(
             bustype='slcan', channel='/dev/ttyCAP' if sniff_traffic else '/dev/ttyACM0', bitrate=500000)
         self._notifier = can.Notifier(self._bus, [self._parse_data])
         self.callbackUpdate = None
-        self._current_angles = [None, None, None]
-        self._new_A_received = False
-        self._new_B_received = False
-        self._new_C_received = False
-        self.x = None
-        self.y = None
-        self.z = None
 
         # Physical operational space [m]
         RADIUS: float = 0.200    # Radius of the usable range
@@ -78,6 +79,23 @@ class DeltaRobot:
         self._notifier.stop()
         self._bus.shutdown()
 
+    def __str__(self) -> str:
+        return f"Delta robot\n \
+    A :\n \
+        Motor id: 0x{format(self.A_motor_id, 'X')}\n \
+        Encoder id: 0x{format(self.A_encoder_id, 'X')}\n \
+    B :\n \
+        Motor id: 0x{format(self.B_motor_id, 'X')}\n \
+        Encoder id: 0x{format(self.B_encoder_id, 'X')}\n \
+    C :\n \
+        Motor id: 0x{format(self.C_motor_id, 'X')}\n \
+        Encoder id: 0x{format(self.C_encoder_id, 'X')}\n \
+    Bus:\n \
+        {print(self._bus)}\n \
+    Current position:\n \
+        x,y,z: {self.x},{self.y},{self.z}\n \
+        θ1,θ2,θ3: {self._angles[0] or 'None'},{self._angles[1] or 'None'},{self._angles[2] or 'None'}"
+
     def _parse_data(self, msg: can.Message) -> None:
         """Parse incoming CAN message and update current angles and call the callback if it exists.
 
@@ -87,22 +105,17 @@ class DeltaRobot:
         Raises:
             can.CanOperationError: if the message arbitration id is not one of the angles.
         """
+        # Update angles
         try:
             # pprint(msg)
             id = msg.arbitration_id
             angle = struct.unpack('d', msg.data)[0]
             if id == self.A_encoder_id:
-                self._current_angles[0] = angle
-                self._new_A_received = True
-                # print("New A received")
+                self._angles[0] = angle
             elif id == self.B_encoder_id:
-                self._current_angles[1] = angle
-                self._new_B_received = True
-                # print("New B received")
+                self._angles[1] = angle
             elif id == self.C_encoder_id:
-                self._current_angles[2] = angle
-                self._new_C_received = True
-                # print("New C received")
+                self._angles[2] = angle
             else:
                 print(
                     f"Arbitration id options are:\n\t{self.A_encoder_id}\n\t{self.B_encoder_id}\n\t{self.C_encoder_id}")
@@ -112,12 +125,9 @@ class DeltaRobot:
             print("Error in _parse_data: {e}")
             raise e
 
-        # and self._new_A_received and self._new_B_received and self._new_C_received:
-        if not None in self._current_angles:
-            self._new_A_received = False
-            self._new_B_received = False
-            self._new_C_received = False
-            new_position = self.DGM(self._current_angles)
+        # Update position
+        if not None in self._angles:
+            new_position = self.DGM(self._angles)
 
             self.x, self.y, self.z = new_position
 
@@ -175,9 +185,9 @@ class DeltaRobot:
         Returns:
             int: a bit superposition if the command failed (0b0CBA), 0 otherwise
         """
-        ret_A = self.moveAxisTo(self.A_axis_id, angle_A)
-        ret_B = self.moveAxisTo(self.B_axis_id, angle_B)
-        ret_C = self.moveAxisTo(self.C_axis_id, angle_C)
+        ret_A = self.moveAxisTo(self.A_motor_id, angle_A)
+        ret_B = self.moveAxisTo(self.B_motor_id, angle_B)
+        ret_C = self.moveAxisTo(self.C_motor_id, angle_C)
 
         return ret_A + 2*ret_B + 4*ret_C
 
@@ -194,32 +204,54 @@ class DeltaRobot:
         return self.moveAllAxesTo(angle_A, angle_B, angle_C)
 
     def IGM(self, X_op: tuple[float, float, float]) -> tuple[float, float, float]:
+        """Inverse Geometric Model converting from x,y,z cartesian coordinate system to θ1,θ2,θ3 angle system.
+
+        Args:
+            X_op (tuple[float, float, float]): x,y,z position to convert
+
+        Raises:
+            ArithmeticError: if the position is unreachable by the robot
+
+        Returns:
+            tuple[float, float, float]: the three motor angles to reach the position
+        """
         Q_art: tuple[float, float, float] = None
-        X_op_rounded = tuple([round(x, DeltaRobot.GM_PRECISION) for x in X_op])
+        X_op_rounded = tuple([round(x, GM.GM_PRECISION) for x in X_op])
         if DeltaRobot.DEBUG:
             (x, y, z) = X_op_rounded
             Q_art = [x/100.0, y/100.0, z/100.0]
         else:
-            Q_art, err = GM_functions.Rot_Inv_Geometric_Model(X_op_rounded)
+            Q_art, err = GM.Rot_Inv_Geometric_Model(X_op_rounded)
             if err != 0:
                 raise ArithmeticError(
                     f"Rot_Inv_Geometric_Model returned error number {err}")
-            Q_art = [round(q, DeltaRobot.GM_PRECISION) for q in Q_art]
+            Q_art = [round(q, GM.GM_PRECISION) for q in Q_art]
 
         return Q_art
 
     def DGM(self, Q_art: tuple[float, float, float]) -> tuple[float, float, float]:
+        """Direct Geometric Model converting from θ1,θ2,θ3 angle system to x,y,z cartesian coordinate system.
+
+        Args:
+            Q_art (tuple[float, float, float]): θ1,θ2,θ3 angles to convert
+
+        Raises:
+            ArithmeticError: if the position is unreachable by the robot
+
+        Returns:
+            tuple[float, float, float]: the position reached with the three given motor angles
+        """
         X_op: tuple[float, float, float] = None
         Q_art_rounded = tuple(
-            [round(q, DeltaRobot.GM_PRECISION) for q in Q_art])
+            [round(q, GM.GM_PRECISION) for q in Q_art])
         if DeltaRobot.DEBUG:
             (x, y, z) = Q_art_rounded
             X_op = [x*100.0, y*100.0, z*100.0]
         else:
-            X_op, err = GM_functions.Rot_Dir_Geometric_Model(Q_art_rounded)
+            X_op, err = GM.Rot_Dir_Geometric_Model(Q_art_rounded)
             if err != 0:
                 raise ArithmeticError(
                     f"Rot_Dir_Geometric_Model returned error number {err}")
-            X_op = [round(x, DeltaRobot.GM_PRECISION) for x in X_op]
+            X_op = [round(x, GM.GM_PRECISION) for x in X_op]
 
         return X_op

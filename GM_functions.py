@@ -3,6 +3,9 @@
 from math import *
 from functools import cache
 
+# Number of decimals
+GM_PRECISION = 3
+
 # Robot dimensions in [m]
 L_a: float = 0.091
 L_b: float = 0.166
