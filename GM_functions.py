@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from math import *
 from functools import cache
 
@@ -127,3 +129,65 @@ def Rot_Dir_Geometric_Model(Q_in: tuple[float, float, float]) -> tuple[tuple[flo
 
     # print(f"Direct gonna return ({X[1:]},{error_id})")
     return (X[1:], error_id)
+
+
+# Timing tests
+# Last check :
+#   36.75925313899825 seconds
+#   GM error: 71714, Math domain error: 35104, BaseException:0, total err: 106818, Tries: 1000000 -> 10.681799999999999% error
+
+def IGM(X_op: tuple[float, float, float]) -> tuple[float, float, float]:
+    Q_art: tuple[float, float, float] = None
+    X_op_rounded = tuple([round(x, GM_PRECISION) for x in X_op])
+
+    Q_art, err = Rot_Inv_Geometric_Model(X_op_rounded)
+    if err != 0:
+        raise ArithmeticError(
+            f"Rot_Inv_Geometric_Model returned error number {err}")
+    Q_art = [round(q, GM_PRECISION) for q in Q_art]
+
+    return Q_art
+
+
+def DGM(Q_art: tuple[float, float, float]) -> tuple[float, float, float]:
+    X_op: tuple[float, float, float] = None
+    Q_art_rounded = tuple(
+        [round(q, GM_PRECISION) for q in Q_art])
+
+    X_op, err = Rot_Dir_Geometric_Model(Q_art_rounded)
+    if err != 0:
+        raise ArithmeticError(
+            f"Rot_Dir_Geometric_Model returned error number {err}")
+    X_op = [round(x, GM_PRECISION) for x in X_op]
+
+    return X_op
+
+
+err = aerr = verr = tot = 0
+GM_PRECISION = 3
+
+
+def test():
+    global err, aerr, verr, tot
+    x = random.randrange(-100, 100, 5)/1000.0
+    y = random.randrange(-100, 100, 5)/1000.0
+    z = random.randrange(-150, -100, 5)/1000.0
+    try:
+        angles = IGM((x, y, z))
+        pos = DGM(angles)
+    except ArithmeticError:
+        aerr += 1
+    except ValueError:
+        verr += 1
+    except BaseException:
+        err += 1
+    finally:
+        tot += 1
+
+
+if __name__ == '__main__':
+    import timeit
+    import random
+    print(str(timeit.timeit("test()", setup="from __main__ import test")) + " seconds")
+    print(
+        f"GM error: {aerr}, Math domain error: {verr}, BaseException:{err}, total err: {aerr+verr+err}, Tries: {tot} -> {((aerr+verr+err)/tot)*100}% error")
