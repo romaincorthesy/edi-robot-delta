@@ -146,7 +146,8 @@ class DeltaRobot:
         """
         msg = can.Message(arbitration_id=dest_id,
                           data=data,
-                          is_extended_id=True,
+                          is_extended_id=False,
+                          dlc=8,
                           check=True)
 
         try:
@@ -170,9 +171,34 @@ class DeltaRobot:
         Returns:
             int: 1 if the command failed, 0 otherwise
         """
-        ba = bytearray(struct.pack("d", angle))  # Using double : 8 bytes
-        # print(f"{ba.hex(':')} ({angle})") # Prints as '40:45:35:c2:8f:5c:28:f6 (42.420000)'
-        return self._sendMsg(axis_id, ba)
+        # Sign is stored separatly in the data frame
+        processed_angle = abs(angle)
+
+        # Create the 4 parts of the data frame (control tyope, angle sign, angle integer part, angle decimal part)
+        control_type_in_hex = '03'  # 0x03 : position control
+        sign_in_hex = 'ff' if angle < 0 else '00' # 0xff = negative angle, 0x00 = positive or zero
+        int_part = trunc(processed_angle)
+        dec_part = trunc((processed_angle - int_part)*100)
+
+        # Convert the dta frame parts in bytes
+        control_type_in_bytes = bytes.fromhex(control_type_in_hex)
+        sign_in_bytes = bytes.fromhex(sign_in_hex)
+        int_part_in_bytes = int_part.to_bytes(2, 'big')
+        dec_part_in_bytes = dec_part.to_bytes(1, 'big')
+
+        # Concat the data frame
+        data_unpaded = control_type_in_bytes + sign_in_bytes + \
+            int_part_in_bytes + dec_part_in_bytes
+
+        # Pad data frame to be 8 bytes long
+        len_diff = 8-len(data_unpaded)
+        for _ in range(len_diff):
+            data_unpaded += b'\0'
+        
+        # Convert data frame to byte array to be send
+        data_paded = bytearray(data_unpaded)
+
+        return self._sendMsg(axis_id, data_paded)
 
     def moveAllAxesTo(self, angle_A: float, angle_B: float, angle_C: float) -> int:
         """Send a command to the robot to set all axes to a given set of angles.

@@ -138,8 +138,8 @@ def onRobotPositionChanged(pos: tuple[float, float, float]) -> None:
     robot_x, robot_y = robotToScreen(robot, input_device)
 
 
-robot = DeltaRobot(A_motor_id=0x1, B_motor_id=0x2, C_motor_id=0x3,
-                   A_encoder_id=0x1, B_encoder_id=0x2, C_encoder_id=0x3,
+robot = DeltaRobot(A_motor_id=0x11, B_motor_id=0x12, C_motor_id=0x13,
+                   A_encoder_id=0x11, B_encoder_id=0x12, C_encoder_id=0x13,
                    sniff_traffic=False)
 # robot.callbackUpdate = onRobotPositionChanged
 
