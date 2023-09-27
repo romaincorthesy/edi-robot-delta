@@ -3,6 +3,7 @@
 import can
 import struct
 import GM_functions as GM
+from math import *
 
 
 class OperationalSpace:

@@ -33,8 +33,10 @@ last_time_ns: int = time_ns()
 
 
 class GameMode(Enum):
+    STD_EXPO_MODE = 0
     USER_FOLLOWS = 1
     ROBOT_FOLLOWS = 2
+    TEST_CMD = 3
 
 
 def drawText(text: str, topleft: tuple[int, int], color: tuple[int, int, int]):
@@ -70,22 +72,6 @@ def updateScreen() -> None:
     pygame.display.update()
 
 
-pygame.init()
-# If set_mode is raising "pygame.error: Unable to open a console terminal",
-# and the python file is launched through ssh, the reason is there is no DISPLAY set.
-# Run "export DISPLAY=:0" through ssh and try again.
-screen = pygame.display.set_mode((DISPLAY_WIDTH, DISPLAY_HEIGHT))
-pygame.display.toggle_fullscreen()
-font = pygame.font.SysFont(None, 24)
-
-DELTA_POSITION_THRESHOLD: int = 150
-winner = ""
-game_mode: GameMode = GameMode.USER_FOLLOWS
-current_speed: float = 1.0
-dxy = 0.0
-i = 0
-
-
 # Input device
 def updateCallback(device: IInputDevice) -> None:
     """Function called when the input device fires a event indicating a new position
@@ -93,7 +79,7 @@ def updateCallback(device: IInputDevice) -> None:
     Args:
         device (IInputDevice): the device itself (should not usually be set)
     """
-    print("callback input")
+    # print("callback input")
 
     global user_x, user_y, robot_x, robot_y, winner, last_time_ns, dxy
 
@@ -206,46 +192,113 @@ def getPathPoint(path, i):
     return (path[i][0] + DISPLAY_WIDTH // 2, path[i][1] + DISPLAY_HEIGHT // 2)
 
 
-# Main loop
-running = True
-while running:
-    for event in pygame.event.get():
-        # Windows closed with cross
-        if event.type == pygame.QUIT:
-            running = False
+if __name__ == "__main__":
+    import sys
 
-        # Quit the game with a press on Escape key
-        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            running = False
+    # Get argument to set GameMode
+    if len(sys.argv) > 1:   # sys.argv[0] : fileName
+        arg = sys.argv[1]
+    else:
+        arg = None
 
-        # Update device position on motion
-        elif event.type == pygame.MOUSEMOTION:
-            x, y = pygame.mouse.get_pos()
-            input_device.updatePosition(x, y)
+    print(f"\nThis file ({sys.argv[0]}) can be optionnaly run with one of these flags:\n\
+    -u, --user-follows  : try to follow the robot as fast as you can\n\
+    -r, --robot-follows : try to outspeed the robot\n\
+    -t, --test-cmd      : send commands to test that the robot is working as intended\n")
 
-    # Update user-robot position error
-    dx = user_x - robot_x
-    dy = user_y - robot_y
-    dxy = sqrt(dx*dx + dy*dy)
+    if arg == "-u" or arg == "--user-follows":
+        print("Running in user-follows mode: try to follow the robot as fast as you can\n")
+        game_mode: GameMode = GameMode.USER_FOLLOWS
+    elif arg == "-r" or arg == "--robot-follows":
+        print("Running in robot-follows: try to outspeed the robot")
+        game_mode: GameMode = GameMode.ROBOT_FOLLOWS
+    elif arg == "-t" or arg == "--test-cmd":
+        print("Running in test mode\n--------------------\nAvailable commands:\n\
+    p - Position:   p0,0,0.200   = moveBaseToXYZ(0, 0, 0.200) [m]\n\
+    f - Flat plane: f0.010,0.020 = moveBaseToXYZ(0.010, 0.020, z_max) [m]\n\
+    a - Angles:     a0,0,30      = moveAllAxesTo(0, 0, 30) [°]\n\
+    z - Z axis:     z20          = moveAllAxesTo(20, 20, 20) [°]\n")
+        game_mode: GameMode = GameMode.TEST_CMD
+    else:
+        print("Running without known args, standard use (expo)\n")
+        game_mode: GameMode = GameMode.STD_EXPO_MODE
+        raise NotImplementedError(
+            "GameMode.STD_EXPO_MODE not yet implemented, run with -u, -r or -t")
 
-    if game_mode == GameMode.USER_FOLLOWS:
-        if dxy > DELTA_POSITION_THRESHOLD:
-            # Robot wins against user
-            winner = "robot"
+    pygame.init()
+    # If set_mode is raising "pygame.error: Unable to open a console terminal",
+    # and the python file is launched through ssh, the reason is there is no DISPLAY set.
+    # Run "export DISPLAY=:0" through ssh and try again.
+    screen = pygame.display.set_mode((DISPLAY_WIDTH, DISPLAY_HEIGHT))
+    pygame.display.toggle_fullscreen()
+    font = pygame.font.SysFont(None, 24)
 
-        if time_ns() - last_time_ns > 1_000_000_000*current_speed:
-            robot_x, robot_y = getPathPoint(path, i)
-            print(f"New point: {robot_x}, {robot_y}")
-            x, y = screenToRobot(input_device, robot, (robot_x, robot_y))
+    DELTA_POSITION_THRESHOLD: int = 150
+    winner = ""
+    current_speed: float = 1.0
+    dxy = 0.0
+    i = 0
 
-            if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
-                print("Error sending message")
+    # Main loop
+    running = True
+    while running:
+        for event in pygame.event.get():
+            # Windows closed with cross
+            if event.type == pygame.QUIT:
+                running = False
 
-            i += 1
-            i %= len(path)
-            if current_speed > 0.02:
-                current_speed -= 0.02
-            last_time_ns = time_ns()
-    updateScreen()
+            # Quit the game with a press on Escape key
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                running = False
 
-pygame.quit()
+            # Update device position on motion
+            elif event.type == pygame.MOUSEMOTION:
+                x, y = pygame.mouse.get_pos()
+                input_device.updatePosition(x, y)
+
+        # Update user-robot position error
+        dx = user_x - robot_x
+        dy = user_y - robot_y
+        dxy = sqrt(dx*dx + dy*dy)
+
+        if game_mode == GameMode.USER_FOLLOWS:
+            if dxy > DELTA_POSITION_THRESHOLD:
+                # Robot wins against user
+                winner = "robot"
+
+            if time_ns() - last_time_ns > 1_000_000_000*current_speed:
+                robot_x, robot_y = getPathPoint(path, i)
+                print(f"New point: {robot_x}, {robot_y}")
+                x, y = screenToRobot(input_device, robot, (robot_x, robot_y))
+
+                if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
+                    print("Error sending message")
+
+                i += 1
+                i %= len(path)
+                if current_speed > 0.02:
+                    current_speed -= 0.02
+                last_time_ns = time_ns()
+        elif game_mode == GameMode.TEST_CMD:
+            input1 = input()
+            type = input1[0]
+            if type == 'p':
+                x, y, z = input1[1:].split(',')
+                if robot.moveBaseToXYZ((float(x), float(y), float(z))) != 0:
+                    print("Error sending message")
+            elif type == 'f':
+                a = input1[1:]
+                if robot.moveAllAxesTo(float(a), float(a), float(a)) != 0:
+                    print("Error sending message")
+            elif type == 'a':
+                a, b, c = input1[1:].split(',')
+                if robot.moveAllAxesTo(float(a), float(b), float(c)) != 0:
+                    print("Error sending message")
+            elif type == 'z':
+                a = input1[1:]
+                if robot.moveAllAxesTo(float(a), float(a), float(a)) != 0:
+                    print("Error sending message")
+
+        updateScreen()
+
+    pygame.quit()
