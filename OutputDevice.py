@@ -65,6 +65,9 @@ class DeltaRobot:
         self._notifier = can.Notifier(self._bus, [self._parse_data])
         self.callbackUpdate = None
 
+        # Mechanical reality
+        self.GEAR_RATIO: float = 6.0
+
         # Physical operational space [m]
         RADIUS: float = 0.200    # Radius of the usable range
         MIN_X = -RADIUS/2
@@ -73,6 +76,8 @@ class DeltaRobot:
         MAX_Y = RADIUS/2
         MIN_Z = -0.100
         MAX_Z = -0.150
+        self.MIN_THETA = -45  # deg
+        self.MAX_THETA = 80  # deg
         self.operational_space = OperationalSpace(
             MIN_X, MAX_X, MIN_Y, MAX_Y, MIN_Z, MAX_Z)
 
@@ -110,7 +115,7 @@ class DeltaRobot:
         try:
             # pprint(msg)
             id = msg.arbitration_id
-            angle = struct.unpack('d', msg.data)[0]
+            angle = struct.unpack('d', msg.data)[0] / self.GEAR_RATIO
             if id == self.A_encoder_id:
                 self._angles[0] = angle
             elif id == self.B_encoder_id:
@@ -173,7 +178,7 @@ class DeltaRobot:
             int: 1 if the command failed, 0 otherwise
         """
         # Sign is stored separatly in the data frame
-        processed_angle = abs(angle)
+        processed_angle = abs(angle) * self.GEAR_RATIO
 
         # Create the 4 parts of the data frame (control tyope, angle sign, angle integer part, angle decimal part)
         control_type_in_hex = '03'  # 0x03 : position control
@@ -195,7 +200,7 @@ class DeltaRobot:
         len_diff = 8-len(data_unpaded)
         for _ in range(len_diff):
             data_unpaded += b'\0'
-        
+
         # Convert data frame to byte array to be send
         data_paded = bytearray(data_unpaded)
 
@@ -254,7 +259,7 @@ class DeltaRobot:
                     f"Rot_Inv_Geometric_Model returned error number {err}")
             Q_art = [round(q, GM.GM_PRECISION) for q in Q_art]
 
-        return Q_art
+        return tuple([degrees(a) for a in Q_art])
 
     def DGM(self, Q_art: tuple[float, float, float]) -> tuple[float, float, float]:
         """Direct Geometric Model converting from θ1,θ2,θ3 angle system to x,y,z cartesian coordinate system.

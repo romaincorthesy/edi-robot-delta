@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from math import *
+import random
 from functools import cache
 
 # Number of decimals
@@ -38,12 +39,13 @@ def Rot_Inv_Geometric_Model(X_in: tuple[float, float, float]) -> tuple[tuple[flo
         if (-2*R - S - T[i]*(R/L_a - 1)) == 0:
             error_id = -1
 
-    return (Q[1:], error_id)
+    # -pi/4 because the coordonates system has 90° offset in motor position
+    return ([q-pi/2 for q in Q[1:]], error_id)
 
 
 @cache
 def Rot_Dir_Geometric_Model(Q_in: tuple[float, float, float]) -> tuple[tuple[float, float, float], int]:
-    Q = [None, Q_in[0], Q_in[1], Q_in[2]]
+    Q = [i+pi/2 for i in [None, Q_in[0], Q_in[1], Q_in[2]]]
 
     error_id: int = 0
 
