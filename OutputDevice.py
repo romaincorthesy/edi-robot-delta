@@ -3,6 +3,7 @@
 import can
 import struct
 import GM_functions as GM
+import GM_functions_2 as GM2
 from math import *
 
 
@@ -232,7 +233,13 @@ class DeltaRobot:
         Returns:
             int: a bit superposition if the sending ov the move command failed (0b0CBA), 0 otherwise
         """
-        angle_A, angle_B, angle_C = self.IGM(xyz_coord)
+        try:
+            angle_A, angle_B, angle_C = self.IGM(xyz_coord)
+        except ValueError:
+            return 1
+
+        print(
+            f"{xyz_coord[0]:.6f},{xyz_coord[1]:.6f},{xyz_coord[2]:.6f} > {angle_A:.6f}, {angle_B:.6f}, {angle_C:.6f}")
         return self.moveAllAxesTo(angle_A, angle_B, angle_C)
 
     def IGM(self, X_op: tuple[float, float, float]) -> tuple[float, float, float]:
@@ -247,6 +254,13 @@ class DeltaRobot:
         Returns:
             tuple[float, float, float]: the three motor angles to reach the position
         """
+
+        X_op_rounded = tuple([round(x, GM.GM_PRECISION) for x in X_op])
+        Q_art = GM2.getAnglesDegreesFromPosition(
+            X_op_rounded, self.MIN_THETA, self.MAX_THETA, silent=True)
+
+        return Q_art
+
         Q_art: tuple[float, float, float] = None
         X_op_rounded = tuple([round(x, GM.GM_PRECISION) for x in X_op])
         if DeltaRobot.DEBUG:
