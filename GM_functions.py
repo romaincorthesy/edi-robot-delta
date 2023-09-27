@@ -169,7 +169,6 @@ def DGM(Q_art: tuple[float, float, float]) -> tuple[float, float, float]:
 
 
 err = aerr = verr = tot = 0
-GM_PRECISION = 3
 
 
 def test():
@@ -190,7 +189,29 @@ def test():
         tot += 1
 
 
-if __name__ == '__main__':
+def listAnglesForZ():
+    list_z = []
+    for z in range(-236, 237, 1):
+        try:
+            reps = IGM((0, 0, z/1000.0))
+            # Correct for different coordinate system
+            sol = [-rep+45 for rep in reps]
+        except ValueError:
+            sol = [None, None, None]
+
+        list_z.append((z/1000.0, sol[0]))
+
+    return list_z
+
+
+if __name__ == "__main__":
+    list_z = listAnglesForZ()
+
+    with open("./output_angles_list_GM.csv", 'w') as f:
+        print("Pos_z [m],Solution1 [°]", file=f)
+        for z, sol in list_z:
+            print(f"{z},{sol}", file=f)
+
     import timeit
     import random
     print(str(timeit.timeit("test()", setup="from __main__ import test")) + " seconds")
