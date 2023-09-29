@@ -70,14 +70,14 @@ class DeltaRobot:
         self.GEAR_RATIO: float = 6.0
 
         # Physical operational space [m]
-        RADIUS: float = 0.200    # Radius of the usable range
-        MIN_X = -RADIUS/2
-        MAX_X = RADIUS/2
-        MIN_Y = -RADIUS/2
-        MAX_Y = RADIUS/2
+        self.WORK_RADIUS: float = 0.200    # Radius of the usable range
+        MIN_X = -self.WORK_RADIUS/2
+        MAX_X = self.WORK_RADIUS/2
+        MIN_Y = -self.WORK_RADIUS/2
+        MAX_Y = self.WORK_RADIUS/2
         MIN_Z = -0.100
         MAX_Z = -0.150
-        self.MIN_THETA = -45  # deg
+        self.MIN_THETA = -40  # deg
         self.MAX_THETA = 80  # deg
         self.operational_space = OperationalSpace(
             MIN_X, MAX_X, MIN_Y, MAX_Y, MIN_Z, MAX_Z)
@@ -183,7 +183,8 @@ class DeltaRobot:
 
         # Create the 4 parts of the data frame (control tyope, angle sign, angle integer part, angle decimal part)
         control_type_in_hex = '03'  # 0x03 : position control
-        sign_in_hex = 'ff' if angle < 0 else '00' # 0xff = negative angle, 0x00 = positive or zero
+        # 0xff = negative angle, 0x00 = positive or zero
+        sign_in_hex = 'ff' if angle < 0 else '00'
         int_part = trunc(processed_angle)
         dec_part = trunc((processed_angle - int_part)*100)
 
@@ -257,7 +258,7 @@ class DeltaRobot:
 
         X_op_rounded = tuple([round(x, GM.GM_PRECISION) for x in X_op])
         Q_art = GM2.getAnglesDegreesFromPosition(
-            X_op_rounded, self.MIN_THETA, self.MAX_THETA, silent=True)
+            X_op_rounded, self.MIN_THETA, self.MAX_THETA, self.WORK_RADIUS, silent=True)
 
         return Q_art
 

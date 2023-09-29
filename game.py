@@ -14,11 +14,14 @@ from OutputDevice import DeltaRobot
 # Color constants
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
+GREEN = (0, 255, 0)
 GRAY = (200, 200, 200)
 
 # Screen setup
 DISPLAY_WIDTH: int = 1440
-DISPLAY_HEIGHT: int = 900
+DISPLAY_HEIGHT: int = 1440
+USABLE_RADIUS: int = 450
+DEBUG_SHOW_GRID: bool = False   # Set to True to display grid for motors limits
 
 # User screen position setup
 USER_DIFF_THRESHOLD: int = 5
@@ -58,11 +61,28 @@ def updateScreen() -> None:
     """
     screen.fill(GRAY)
 
+    if DEBUG_SHOW_GRID:
+        for x, y, color in points:
+            pygame.draw.circle(
+                screen, color, (x, y), 2)
+
     drawText(f'Robot: {robot_x}, {robot_y}', (20, 50), RED)
     pygame.draw.circle(screen, RED, (robot_x, robot_y), 6)
 
     drawText(f'User: {user_x}, {user_y}', (20, 20), BLACK)
     pygame.draw.circle(screen, BLACK, (user_x, user_y), 3)
+
+    # Input device radius
+    pygame.draw.circle(screen, BLACK, (int(DISPLAY_WIDTH/2),
+                                       int(DISPLAY_HEIGHT/2)), USABLE_RADIUS, 1)
+
+    # Output device radius
+    #! TODO : THIS DOESN'T WORK
+    # work_radius = int(SC.remap(0, robot.operational_space.x_axis_max,
+    #                   0, USABLE_RADIUS, robot.WORK_RADIUS))
+    # print("work radius:", work_radius)
+    # pygame.draw.circle(screen, RED, (int(DISPLAY_WIDTH/2),
+    #                                  int(DISPLAY_HEIGHT/2)), work_radius, 1)
 
     if winner == "user":
         userWon()
@@ -74,68 +94,45 @@ def updateScreen() -> None:
 
 # Input device
 def updateCallback(device: IInputDevice) -> None:
-    """Function called when the input device fires a event indicating a new position
+    """Function called when the input device fires a event indicating a new position. Update user position.
 
     Args:
-        device (IInputDevice): the device itself (should not usually be set)
+        device (IInputDevice): the input device which fired a event
     """
-    # print("callback input")
+    global user_x, user_y, FLAG_SEND_POSITION_TO_ROBOT
 
-    global user_x, user_y, robot_x, robot_y, winner, last_time_ns, dxy
-
-    if game_mode == GameMode.ROBOT_FOLLOWS:
-        if dxy > DELTA_POSITION_THRESHOLD:
-            # User wins against robot
-            winner = "user"
-
-        # Fake robot movement with delay
-        if time_ns() - last_time_ns > FAKE_ROBOT_DELAY_MS*1_000_000:
-            robot_x = device.x
-            robot_y = device.y
-            last_time_ns = time_ns()
-
-        # Only send a new position message through CAN if the input position has moved enough
+    if game_mode == GameMode.USER_FOLLOWS:
+        # Update user position asap
+        user_x = device.x
+        user_y = device.y
+        FLAG_SEND_POSITION_TO_ROBOT = True
+    elif game_mode == GameMode.ROBOT_FOLLOWS:
+        # Only update user position if the input position has moved enough
         if abs(device.x - user_x) > USER_DIFF_THRESHOLD or abs(device.y - user_y) > USER_DIFF_THRESHOLD:
-            # print(f"x: {device.x} - {user_x} = {device.x - user_x}  y: {device.y} - {user_y} = {device.y - user_y}")
             user_x = device.x
             user_y = device.y
-
-            x, y = screenToRobot(input_device, robot)
-            if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
-                print("Error sending message")
+            FLAG_SEND_POSITION_TO_ROBOT = True
 
 
 # input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
-input_device = Mouse(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
+input_device = Mouse(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH,
+                     screen_usable_height=2*USABLE_RADIUS, screen_usable_width=2*USABLE_RADIUS)
 input_device.callbackUpdate = updateCallback
 
 
 # Output device
-def onRobotPositionChanged(pos: tuple[float, float, float]) -> None:
-    """Function called when the robot's encoder position has changed
-
-    Args:
-        pos (tuple[float, float, float]): the new x,y,z position in the robot operational space
-    """
-    x, y, z = pos
-    print(f"New position: {x}, {y}, {z}")
-
-    global robot_x, robot_y
-    robot_x, robot_y = robotToScreen(robot, input_device)
-
-
 robot = DeltaRobot(A_motor_id=0x11, B_motor_id=0x12, C_motor_id=0x13,
                    A_encoder_id=0x11, B_encoder_id=0x12, C_encoder_id=0x13,
                    sniff_traffic=False)
-# robot.callbackUpdate = onRobotPositionChanged
 
 
 def screenToRobot(input_device: IInputDevice, robot: DeltaRobot, force_value: tuple[int, int] = None) -> tuple[float, float]:
     """Convert from screen to robot coordinate system. 
 
     Args:
-        input_device (IInputDevice): an input device from which to convert the x and y properties
-        robot (DeltaRobot): a robot with an operational space to convert to
+        input_device (IInputDevice): an input device from which to convert the x and y properties.
+        robot (DeltaRobot): a robot with an operational space to convert to.
+        force_value (tuple[int, int], optional): an position to convert instead of the input device's position. Defaults to None.
 
     Returns:
         tuple[float, float]: a pair x,y in the robot's coordinate system
@@ -146,9 +143,16 @@ def screenToRobot(input_device: IInputDevice, robot: DeltaRobot, force_value: tu
     else:
         x_in = input_device.x
         y_in = input_device.y
-    x = SC.remap(0, input_device.screen_width, robot.operational_space.x_axis_min,
+
+    start_screen_usable_x = (
+        input_device.screen_width-input_device.screen_usable_width)/2
+    end_screen_usable_x = start_screen_usable_x + input_device.screen_usable_width
+    start_screen_usable_y = (
+        input_device.screen_height-input_device.screen_usable_height)/2
+    end_screen_usable_y = start_screen_usable_x + input_device.screen_usable_height
+    x = SC.remap(start_screen_usable_x, end_screen_usable_x, robot.operational_space.x_axis_min,
                  robot.operational_space.x_axis_max, x_in)
-    y = SC.remap(0, input_device.screen_height, robot.operational_space.y_axis_min,
+    y = SC.remap(start_screen_usable_y, end_screen_usable_y, robot.operational_space.y_axis_min,
                  robot.operational_space.y_axis_max, y_in)
 
     return (x, y)
@@ -170,6 +174,14 @@ def robotToScreen(robot: DeltaRobot, input_device: IInputDevice) -> tuple[float,
                  robot.operational_space.y_axis_max, 0, input_device.screen_height, robot.y)
 
     return (x, y)
+
+
+def isInsideRadius(x: int, y: int, radius: int, center_x: int, center_y: int) -> bool:
+    dx = x - center_x
+    dy = y - center_y
+    point_radius = sqrt(dx**2 + dy**2)
+
+    return point_radius < radius
 
 
 def userWon() -> None:
@@ -222,8 +234,6 @@ if __name__ == "__main__":
     else:
         print("Running without known args, standard use (expo)\n")
         game_mode: GameMode = GameMode.STD_EXPO_MODE
-        raise NotImplementedError(
-            "GameMode.STD_EXPO_MODE not yet implemented, run with -u, -r or -t")
 
     pygame.init()
     # If set_mode is raising "pygame.error: Unable to open a console terminal",
@@ -233,15 +243,31 @@ if __name__ == "__main__":
     pygame.display.toggle_fullscreen()
     font = pygame.font.SysFont(None, 24)
 
+    FLAG_SEND_POSITION_TO_ROBOT = True
     DELTA_POSITION_THRESHOLD: int = 150
     winner = ""
     current_speed: float = 1.0
     dxy = 0.0
     i = 0
 
+    if DEBUG_SHOW_GRID:
+        print("Calculating motors limits...")
+        points: list[tuple[int, int, tuple[int, int, int]]] = []
+        for x in range(0, DISPLAY_WIDTH, 4):
+            for y in range(0, DISPLAY_HEIGHT, 4):
+                x_r, y_r = screenToRobot(input_device, robot, (x, y))
+                try:
+                    angle_A, angle_B, angle_C = robot.IGM(
+                        (x_r, y_r, robot.operational_space.z_axis_max))
+                    points.append((int(x), int(y), GREEN))
+                except ValueError:
+                    points.append((int(x), int(y), RED))
+        print("Done calculating. Everything's gonna be sloooow")
+
     # Main loop
     running = True
     while running:
+        # Check for events
         for event in pygame.event.get():
             # Windows closed with cross
             if event.type == pygame.QUIT:
@@ -261,24 +287,52 @@ if __name__ == "__main__":
         dy = user_y - robot_y
         dxy = sqrt(dx*dx + dy*dy)
 
-        if game_mode == GameMode.USER_FOLLOWS:
+        if game_mode == GameMode.STD_EXPO_MODE:
+            raise NotImplementedError(
+                "GameMode.STD_EXPO_MODE not yet implemented, run with -u, -r or -t")
+        elif game_mode == GameMode.USER_FOLLOWS:
             if dxy > DELTA_POSITION_THRESHOLD:
                 # Robot wins against user
                 winner = "robot"
 
-            if time_ns() - last_time_ns > 1_000_000_000*current_speed:
+            if time_ns() - last_time_ns > 1_000_000_000*current_speed and FLAG_SEND_POSITION_TO_ROBOT:
+                FLAG_SEND_POSITION_TO_ROBOT = False
+
                 robot_x, robot_y = getPathPoint(path, i)
                 print(f"New point: {robot_x}, {robot_y}")
                 x, y = screenToRobot(input_device, robot, (robot_x, robot_y))
-
                 if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
                     print("Error sending message")
 
-                i += 1
-                i %= len(path)
                 if current_speed > 0.02:
                     current_speed -= 0.02
                 last_time_ns = time_ns()
+
+        elif game_mode == GameMode.ROBOT_FOLLOWS:
+
+            if dxy > DELTA_POSITION_THRESHOLD:
+                # User wins against robot
+                winner = "user"
+
+            # Fake robot movement with delay
+            if time_ns() - last_time_ns > FAKE_ROBOT_DELAY_MS*1_000_000:
+                robot_x = user_x
+                robot_y = user_y
+                last_time_ns = time_ns()
+
+            # Send the new position to the robot
+            if FLAG_SEND_POSITION_TO_ROBOT:
+                FLAG_SEND_POSITION_TO_ROBOT = False
+
+                x, y = screenToRobot(input_device, robot, (user_x, user_y))
+                print(user_x, user_y, x, y)
+
+                if isInsideRadius(user_x, user_y, USABLE_RADIUS, int(DISPLAY_WIDTH/2), int(DISPLAY_HEIGHT/2)):
+                    if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
+                        print("Error sending message")
+                else:
+                    print("User position out of usable area")
+
         elif game_mode == GameMode.TEST_CMD:
             input1 = input()
             type = input1[0]
@@ -287,8 +341,8 @@ if __name__ == "__main__":
                 if robot.moveBaseToXYZ((float(x), float(y), float(z))) != 0:
                     print("Error sending message")
             elif type == 'f':
-                a = input1[1:]
-                if robot.moveAllAxesTo(float(a), float(a), float(a)) != 0:
+                x, y = input1[1:].split(',')
+                if robot.moveAllAxesTo(float(x), float(y), robot.operational_space.z_axis_max) != 0:
                     print("Error sending message")
             elif type == 'a':
                 a, b, c = input1[1:].split(',')

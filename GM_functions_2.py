@@ -25,10 +25,15 @@ l = 0.166   # Lower legs parallelogram length
 ########################################################################################################################
 
 
-def getAnglesDegreesFromPosition(position: tuple[float, float, float], min_theta: float, max_theta: float, silent: bool = False) -> tuple[float, float, float]:
+def getAnglesDegreesFromPosition(position: tuple[float, float, float], min_theta: float, max_theta: float, work_radius: float, silent: bool = False) -> tuple[float, float, float]:
     x, y, z = position
 
-    # We don't use Solution 2 because the angles are reversed and offset by
+    # Check work area
+    if not isInsideRadius(x, y, work_radius, 0, 0):
+        print("Requested position out of work area")
+        return ()
+
+    # We don't use Solution 2 because the angles are reversed and offset
     rep1, rep2 = IGM(x, y, z, silent)
 
     # Correct for different coordinate system
@@ -44,11 +49,13 @@ def getAnglesDegreesFromPosition(position: tuple[float, float, float], min_theta
     for angle in sol2:
         if angle > max_theta:
             if sol2_ok == True:
-                print(f"sol2 refused because {angle} > {max_theta}")
+                if not silent:
+                    print(f"sol2 refused because {angle} > {max_theta}")
             sol2_ok = False
         elif angle < min_theta:
             if sol2_ok == True:
-                print(f"sol2 refused because {angle} < {min_theta}")
+                if not silent:
+                    print(f"sol2 refused because {angle} < {min_theta}")
             sol2_ok = False
 
     if not silent:
@@ -200,6 +207,14 @@ def IGM(x: float, y: float, z: float, silent: bool = False):
         print()
 
     return ((theta11, theta12, theta13), (theta21, theta22, theta23))
+
+
+def isInsideRadius(x: float, y: float, radius: float, center_x: float, center_y: float) -> bool:
+    dx = x - center_x
+    dy = y - center_y
+    point_radius = math.sqrt(dx**2 + dy**2)
+
+    return point_radius < radius
 
 
 # TESTS

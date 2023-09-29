@@ -1,6 +1,7 @@
 # Source github user: laundmo (https://gist.github.com/laundmo/b224b1f4c8ef6ca5fe47e132c8deab56)
 from functools import cache
 
+
 @cache
 def lerp(a: float, b: float, t: float) -> float:
     """Linear interpolate on the scale given by a to b, using t as the point on that scale.
@@ -12,12 +13,13 @@ def lerp(a: float, b: float, t: float) -> float:
 
     Returns:
         float: the interpolated value
-    
+
     Examples:
         50 == lerp(0, 100, 0.5)\n
         4.2 == lerp(1, 5, 0.8)
     """
     return (1 - t) * a + t * b
+
 
 @cache
 def inv_lerp(a: float, b: float, v: float) -> float:
@@ -36,6 +38,7 @@ def inv_lerp(a: float, b: float, v: float) -> float:
         0.8 == inv_lerp(1, 5, 4.2)
     """
     return (v - a) / (b - a)
+
 
 @cache
 def remap(i_min: float, i_max: float, o_min: float, o_max: float, v: float) -> float:
