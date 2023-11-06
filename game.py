@@ -45,17 +45,16 @@ ROBOT_FOLLOWS_DURATION_MS: int = 20_000
 USER_FOLLOWS_DURATION_MS: int = 20_000
 mode_duration_last_time_ns: int = time_ns()
 
+# If this flag is set to True, the game stays in the mode in wich it was started, useful for testing the modes.
+# Running the game whith the -r, -u or -t flag will set it to True, running it whith no arg (expo mode) will set it to false.
+FLAG_STAY_IN_FIRST_MODE: bool = False
+
 
 class GameMode(Enum):
     IDLE_STATE = 0
     USER_FOLLOWS = 1
     ROBOT_FOLLOWS = 2
     TEST_CMD = 3
-
-
-# If this flag is set to True, the game stays in the mode in wich it was started, useful for testing the modes.
-# Running the game whith the -r, -u or -t flag will set it to True, running it whith no arg (expo mode) will set it to false.
-FLAG_STAY_IN_FIRST_MODE: bool = False
 
 
 def drawText(text: str, topleft: tuple[int, int], color: tuple[int, int, int]):
@@ -214,10 +213,13 @@ def robotWon() -> None:
 path = []
 with open("./path.json") as f:
     path = json.load(f)
+    print("Path length: ", len(path))
+path_scale_x: float = 0.6
+path_scale_y: float = 1.0
 
 
 def getPathPoint(path, i):
-    return (path[i][0] + DISPLAY_WIDTH // 2, path[i][1] + DISPLAY_HEIGHT // 2)
+    return (int(path[i][0] * path_scale_x + DISPLAY_WIDTH // 2), int(path[i][1] * path_scale_y + DISPLAY_HEIGHT // 2))
 
 
 if __name__ == "__main__":
@@ -267,7 +269,7 @@ if __name__ == "__main__":
     FLAG_SEND_POSITION_TO_ROBOT = True
     DELTA_POSITION_THRESHOLD: int = 150
     winner = ""
-    current_speed: float = 1.0
+    speed_delta_ns: int = 1_000_000
     dxy = 0.0
     i = 0
 
@@ -367,17 +369,22 @@ if __name__ == "__main__":
                 # Robot wins against user
                 winner = "robot"
 
-            if time_ns() - last_time_ns > 1_000_000_000*current_speed and FLAG_SEND_POSITION_TO_ROBOT:
-                FLAG_SEND_POSITION_TO_ROBOT = False
+            if speed_delta_ns > 1_000:
+                speed_delta_ns -= 10_000
+
+            if time_ns() - last_time_ns > speed_delta_ns:
+
+                print("Current delta_ms between points: ", speed_delta_ns/1000.0)
 
                 robot_x, robot_y = getPathPoint(path, i)
-                print(f"New point: {robot_x}, {robot_y}")
+                # print(f"New point: {robot_x}, {robot_y}")
                 x, y = screenToRobot(input_device, robot, (robot_x, robot_y))
                 if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
                     print("Error sending message")
 
-                if current_speed > 0.02:
-                    current_speed -= 0.02
+                i += 1
+                i %= len(path)
+
                 last_time_ns = time_ns()
 
             # Go to next mode (IDLE_STATE)
