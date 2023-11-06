@@ -2,7 +2,7 @@
 
 import pygame
 from pygame.locals import *
-from time import time_ns
+from time import time_ns, sleep
 from math import sqrt
 from enum import Enum
 import json
@@ -30,7 +30,7 @@ USABLE_RADIUS: int = 450
 DEBUG_SHOW_GRID: bool = False   # Set to True to display grid for motors limits
 
 # User screen position setup
-USER_DIFF_THRESHOLD: int = 5
+USER_DIFF_THRESHOLD: int = 1
 user_x: int = 0
 user_y: int = 0
 
@@ -39,6 +39,11 @@ robot_x: int = 0
 robot_y: int = 0
 FAKE_ROBOT_DELAY_MS: int = 100
 last_time_ns: int = time_ns()
+
+# Robot home z positions
+Z_RETRACTED = -0.120
+Z_WORKING = -0.150
+
 
 # Duration of the modes
 ROBOT_FOLLOWS_DURATION_MS: int = 20_000
@@ -209,6 +214,29 @@ def robotWon() -> None:
     drawText('Vous avez perdu ! Vous êtes trop lent', (700, 450), BLACK)
 
 
+def moveRobotToHome(z_pos: float):
+    """Move the robot to center of screen and to the given z position
+
+    Args:
+        z_pos (float): z position of the base in mm
+    """
+    home_x, home_y = screenToRobot(input_device, robot, force_value=(
+        DISPLAY_WIDTH // 2, DISPLAY_HEIGHT // 2))
+    robot.moveBaseToXYZ((home_x, home_y, z_pos))
+
+
+def moveRobotToRetractedHome():
+    """Move the robot to the center of the screen, in the retracted position (waiting position).
+    """
+    moveRobotToHome(Z_RETRACTED)
+
+
+def moveRobotToWorkingHome():
+    """Move the robot to the center of the screen near the glass (working starting position).
+    """
+    moveRobotToHome(Z_WORKING)
+
+
 # Load robot movement path
 path = []
 with open("./path.json") as f:
@@ -267,11 +295,16 @@ if __name__ == "__main__":
     font = pygame.font.SysFont(None, 24)
 
     FLAG_SEND_POSITION_TO_ROBOT = True
-    DELTA_POSITION_THRESHOLD: int = 150
+    DELTA_POSITION_WIN_LOOSE_THRESHOLD: int = 150
     winner = ""
     speed_delta_ns: int = 1_000_000
     dxy = 0.0
     i = 0
+
+    # Flags to keep states init from running multiple times
+    idle_state_init_done: bool = False
+    robot_follows_state_init_done: bool = False
+    user_follows_state_init_done: bool = False
 
     if DEBUG_SHOW_GRID:
         print("Calculating motors limits...")
@@ -318,29 +351,37 @@ if __name__ == "__main__":
         dxy = sqrt(dx*dx + dy*dy)
 
         if game_mode == GameMode.IDLE_STATE:
-            GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.LOW)
-            GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.LOW)
+            if not idle_state_init_done:
+                # This must be done only once when entering the state
+                GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.LOW)
+                GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.LOW)
+
+                moveRobotToWorkingHome()
+                sleep(1)
+                moveRobotToRetractedHome()
+                idle_state_init_done = True
 
             # Wait for button to be pressed, then start go to ROBOT_FOLLOWS state
             if GPIO.input(BUTTON_PIN) == GPIO.LOW:
+                idle_state_init_done = False
+                game_mode = GameMode.ROBOT_FOLLOWS
+
                 # Start a timer for the duration of the ROBOT_FOLLOWS state
                 mode_duration_last_time_ns = time_ns()
 
-                game_mode = GameMode.ROBOT_FOLLOWS
-
         elif game_mode == GameMode.ROBOT_FOLLOWS:
-            GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.LOW)
-            GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.HIGH)
+            if not robot_follows_state_init_done:
+                # This must be done only once when entering the state
+                GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.LOW)
+                GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.HIGH)
 
-            if dxy > DELTA_POSITION_THRESHOLD:
+                sleep(1)
+                moveRobotToWorkingHome()
+                robot_follows_state_init_done = True
+
+            if dxy > DELTA_POSITION_WIN_LOOSE_THRESHOLD:
                 # User wins against robot
                 winner = "user"
-
-            # Fake robot movement with delay
-            if time_ns() - last_time_ns > FAKE_ROBOT_DELAY_MS*1_000_000:
-                robot_x = user_x
-                robot_y = user_y
-                last_time_ns = time_ns()
 
             # Send the new position to the robot
             if FLAG_SEND_POSITION_TO_ROBOT:
@@ -357,15 +398,28 @@ if __name__ == "__main__":
 
             # Go to next mode (USER_FOLLOWS)
             if not FLAG_STAY_IN_FIRST_MODE and time_ns() - mode_duration_last_time_ns > USER_FOLLOWS_DURATION_MS*1_000_000:
+                sleep(1)
+                moveRobotToRetractedHome()
+                sleep(2)
+                robot_follows_state_init_done = False
                 game_mode = GameMode.USER_FOLLOWS
 
                 mode_duration_last_time_ns = time_ns()
 
         elif game_mode == GameMode.USER_FOLLOWS:
-            GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.LOW)
-            GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.HIGH)
+            if not robot_follows_state_init_done:
+                # This must be done only once when entering the state
+                GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.LOW)
+                GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.HIGH)
 
-            if dxy > DELTA_POSITION_THRESHOLD:
+                i = 0
+
+                sleep(1)
+                moveRobotToWorkingHome()
+                sleep(1)
+                robot_follows_state_init_done = True
+
+            if dxy > DELTA_POSITION_WIN_LOOSE_THRESHOLD:
                 # Robot wins against user
                 winner = "robot"
 
@@ -389,6 +443,7 @@ if __name__ == "__main__":
 
             # Go to next mode (IDLE_STATE)
             if not FLAG_STAY_IN_FIRST_MODE and time_ns() - mode_duration_last_time_ns > ROBOT_FOLLOWS_DURATION_MS*1_000_000:
+                robot_follows_state_init_done = False
                 game_mode = GameMode.IDLE_STATE
 
                 mode_duration_last_time_ns = time_ns()
