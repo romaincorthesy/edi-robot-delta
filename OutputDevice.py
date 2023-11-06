@@ -173,11 +173,14 @@ class DeltaRobot:
 
         Args:
             axis_id (int): the CAN id a the motor driver board
-            angle (float): the angle in radians to which the motor should go
+            angle (float): the angle in degrees to which the motor should go
 
         Returns:
             int: 1 if the command failed, 0 otherwise
         """
+        # We adjusted the mechanical position of the arms by 25°
+        angle = angle + 25.0
+
         # Sign is stored separatly in the data frame
         processed_angle = abs(angle) * self.GEAR_RATIO
 
@@ -212,9 +215,9 @@ class DeltaRobot:
         """Send a command to the robot to set all axes to a given set of angles.
 
         Args:
-            angle_A (float): the angle in radians to which motor A should go
-            angle_B (float): the angle in radians to which motor B should go
-            angle_C (float): the angle in radians to which motor C should go
+            angle_A (float): the angle in degrees to which motor A should go
+            angle_B (float): the angle in degrees to which motor B should go
+            angle_C (float): the angle in degrees to which motor C should go
 
         Returns:
             int: a bit superposition if the command failed (0b0CBA), 0 otherwise
@@ -239,8 +242,7 @@ class DeltaRobot:
         except ValueError:
             return 1
 
-        print(
-            f"{xyz_coord[0]:.6f},{xyz_coord[1]:.6f},{xyz_coord[2]:.6f} > {angle_A:.6f}, {angle_B:.6f}, {angle_C:.6f}")
+        # print(f"{xyz_coord[0]:.6f},{xyz_coord[1]:.6f},{xyz_coord[2]:.6f} > {angle_A:.6f}, {angle_B:.6f}, {angle_C:.6f}")
         return self.moveAllAxesTo(angle_A, angle_B, angle_C)
 
     def IGM(self, X_op: tuple[float, float, float]) -> tuple[float, float, float]:

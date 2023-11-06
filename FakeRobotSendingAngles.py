@@ -38,7 +38,7 @@ def sendAngle(axis_id: int, angle: float) -> int:
 
 	Args:
 		axis_id (int): the CAN id of an encoder
-		angle (float): the angle in radians of the motor
+		angle (float): the angle in degrees of the motor
 
 	Returns:
 		int: 1 if the command failed, 0 otherwise
