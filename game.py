@@ -13,8 +13,8 @@ from InputDevice import Touchfoil, Mouse, IInputDevice
 from OutputDevice import DeltaRobot
 
 # GPIO definitions
-ROBOT_FOLLOWS_PANEL_PIN: int = 23
-USER_FOLLOWS_PANEL_PIN: int = 24
+USER_FOLLOWS_PANEL_PIN: int = 23
+ROBOT_FOLLOWS_PANEL_PIN: int = 24
 BUTTON_PIN: int = 18
 
 # Color constants
