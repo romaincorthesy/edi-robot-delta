@@ -6,10 +6,16 @@ from time import time_ns
 from math import sqrt
 from enum import Enum
 import json
+import RPi.GPIO as GPIO
 
 import ScaleConversion as SC
 from InputDevice import Touchfoil, Mouse, IInputDevice
 from OutputDevice import DeltaRobot
+
+# GPIO definitions
+ROBOT_FOLLOWS_PANEL_PIN: int = 23
+USER_FOLLOWS_PANEL_PIN: int = 24
+BUTTON_PIN: int = 18
 
 # Color constants
 BLACK = (0, 0, 0)
@@ -34,12 +40,22 @@ robot_y: int = 0
 FAKE_ROBOT_DELAY_MS: int = 100
 last_time_ns: int = time_ns()
 
+# Duration of the modes
+ROBOT_FOLLOWS_DURATION_MS: int = 20_000
+USER_FOLLOWS_DURATION_MS: int = 20_000
+mode_duration_last_time_ns: int = time_ns()
+
 
 class GameMode(Enum):
-    STD_EXPO_MODE = 0
+    IDLE_STATE = 0
     USER_FOLLOWS = 1
     ROBOT_FOLLOWS = 2
     TEST_CMD = 3
+
+
+# If this flag is set to True, the game stays in the mode in wich it was started, useful for testing the modes.
+# Running the game whith the -r, -u or -t flag will set it to True, running it whith no arg (expo mode) will set it to false.
+FLAG_STAY_IN_FIRST_MODE: bool = False
 
 
 def drawText(text: str, topleft: tuple[int, int], color: tuple[int, int, int]):
@@ -221,9 +237,12 @@ if __name__ == "__main__":
     if arg == "-u" or arg == "--user-follows":
         print("Running in user-follows mode: try to follow the robot as fast as you can\n")
         game_mode: GameMode = GameMode.USER_FOLLOWS
+        FLAG_STAY_IN_FIRST_MODE = True
     elif arg == "-r" or arg == "--robot-follows":
         print("Running in robot-follows: try to outspeed the robot")
         game_mode: GameMode = GameMode.ROBOT_FOLLOWS
+        FLAG_STAY_IN_FIRST_MODE = True
+        FLAG_STAY_IN_FIRST_MODE = True
     elif arg == "-t" or arg == "--test-cmd":
         print("Running in test mode\n--------------------\nAvailable commands:\n\
     p - Position:   p0,0,0.200   = moveBaseToXYZ(0, 0, 0.200) [m]\n\
@@ -231,9 +250,11 @@ if __name__ == "__main__":
     a - Angles:     a0,0,30      = moveAllAxesTo(0, 0, 30) [°]\n\
     z - Z axis:     z20          = moveAllAxesTo(20, 20, 20) [°]\n")
         game_mode: GameMode = GameMode.TEST_CMD
+        FLAG_STAY_IN_FIRST_MODE = True
     else:
         print("Running without known args, standard use (expo)\n")
-        game_mode: GameMode = GameMode.STD_EXPO_MODE
+        FLAG_STAY_IN_FIRST_MODE = False
+        game_mode: GameMode = GameMode.IDLE_STATE
 
     pygame.init()
     # If set_mode is raising "pygame.error: Unable to open a console terminal",
@@ -264,6 +285,13 @@ if __name__ == "__main__":
                     points.append((int(x), int(y), RED))
         print("Done calculating. Everything's gonna be sloooow")
 
+    # Setup GPIO
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setwarnings(False)
+    GPIO.setup(ROBOT_FOLLOWS_PANEL_PIN, GPIO.OUT)
+    GPIO.setup(USER_FOLLOWS_PANEL_PIN, GPIO.OUT)
+    GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
     # Main loop
     running = True
     while running:
@@ -287,28 +315,20 @@ if __name__ == "__main__":
         dy = user_y - robot_y
         dxy = sqrt(dx*dx + dy*dy)
 
-        if game_mode == GameMode.STD_EXPO_MODE:
-            raise NotImplementedError(
-                "GameMode.STD_EXPO_MODE not yet implemented, run with -u, -r or -t")
-        elif game_mode == GameMode.USER_FOLLOWS:
-            if dxy > DELTA_POSITION_THRESHOLD:
-                # Robot wins against user
-                winner = "robot"
+        if game_mode == GameMode.IDLE_STATE:
+            GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.LOW)
+            GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.LOW)
 
-            if time_ns() - last_time_ns > 1_000_000_000*current_speed and FLAG_SEND_POSITION_TO_ROBOT:
-                FLAG_SEND_POSITION_TO_ROBOT = False
+            # Wait for button to be pressed, then start go to ROBOT_FOLLOWS state
+            if GPIO.input(BUTTON_PIN) == GPIO.LOW:
+                # Start a timer for the duration of the ROBOT_FOLLOWS state
+                mode_duration_last_time_ns = time_ns()
 
-                robot_x, robot_y = getPathPoint(path, i)
-                print(f"New point: {robot_x}, {robot_y}")
-                x, y = screenToRobot(input_device, robot, (robot_x, robot_y))
-                if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
-                    print("Error sending message")
-
-                if current_speed > 0.02:
-                    current_speed -= 0.02
-                last_time_ns = time_ns()
+                game_mode = GameMode.ROBOT_FOLLOWS
 
         elif game_mode == GameMode.ROBOT_FOLLOWS:
+            GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.LOW)
+            GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.HIGH)
 
             if dxy > DELTA_POSITION_THRESHOLD:
                 # User wins against robot
@@ -333,6 +353,39 @@ if __name__ == "__main__":
                 else:
                     print("User position out of usable area")
 
+            # Go to next mode (USER_FOLLOWS)
+            if not FLAG_STAY_IN_FIRST_MODE and time_ns() - mode_duration_last_time_ns > USER_FOLLOWS_DURATION_MS*1_000_000:
+                game_mode = GameMode.USER_FOLLOWS
+
+                mode_duration_last_time_ns = time_ns()
+
+        elif game_mode == GameMode.USER_FOLLOWS:
+            GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.LOW)
+            GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.HIGH)
+
+            if dxy > DELTA_POSITION_THRESHOLD:
+                # Robot wins against user
+                winner = "robot"
+
+            if time_ns() - last_time_ns > 1_000_000_000*current_speed and FLAG_SEND_POSITION_TO_ROBOT:
+                FLAG_SEND_POSITION_TO_ROBOT = False
+
+                robot_x, robot_y = getPathPoint(path, i)
+                print(f"New point: {robot_x}, {robot_y}")
+                x, y = screenToRobot(input_device, robot, (robot_x, robot_y))
+                if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
+                    print("Error sending message")
+
+                if current_speed > 0.02:
+                    current_speed -= 0.02
+                last_time_ns = time_ns()
+
+            # Go to next mode (IDLE_STATE)
+            if not FLAG_STAY_IN_FIRST_MODE and time_ns() - mode_duration_last_time_ns > ROBOT_FOLLOWS_DURATION_MS*1_000_000:
+                game_mode = GameMode.IDLE_STATE
+
+                mode_duration_last_time_ns = time_ns()
+
         elif game_mode == GameMode.TEST_CMD:
             input1 = input()
             type = input1[0]
@@ -355,4 +408,5 @@ if __name__ == "__main__":
 
         updateScreen()
 
+    GPIO.cleanup()
     pygame.quit()
