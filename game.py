@@ -275,7 +275,8 @@ if __name__ == "__main__":
         FLAG_STAY_IN_FIRST_MODE = True
     elif arg == "-t" or arg == "--test-cmd":
         print("Running in test mode\n--------------------\nAvailable commands:\n\
-    p - Position:   p0,0,0.200   = moveBaseToXYZ(0, 0, 0.200) [m]\n\
+    p - Position:   p0,0,-0.200  = moveBaseToXYZ(0, 0, -0.200) [m]\n\
+    c - Center:     c-0.200      = moveBaseToXYZ(0, 0, -0.200) [m]\n\
     f - Flat plane: f0.010,0.020 = moveBaseToXYZ(0.010, 0.020, z_max) [m]\n\
     a - Angles:     a0,0,30      = moveAllAxesTo(0, 0, 30) [°]\n\
     z - Z axis:     z20          = moveAllAxesTo(20, 20, 20) [°]\n")
@@ -454,6 +455,10 @@ if __name__ == "__main__":
             if type == 'p':
                 x, y, z = input1[1:].split(',')
                 if robot.moveBaseToXYZ((float(x), float(y), float(z))) != 0:
+                    print("Error sending message")
+            elif type == 'c':
+                z = input1[1:]
+                if robot.moveBaseToXYZ((0, 0, float(z))) != 0:
                     print("Error sending message")
             elif type == 'f':
                 x, y = input1[1:].split(',')
