@@ -178,8 +178,8 @@ class DeltaRobot:
         Returns:
             int: 1 if the command failed, 0 otherwise
         """
-        # We adjusted the mechanical position of the arms by 25°
-        angle = angle + 25.0
+        # We adjusted the mechanical position of the arms by 30°
+        angle = angle + 30.0
 
         # Sign is stored separatly in the data frame
         processed_angle = abs(angle) * self.GEAR_RATIO
