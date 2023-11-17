@@ -26,7 +26,7 @@ GRAY = (200, 200, 200)
 # Screen setup
 DISPLAY_WIDTH: int = 1440
 DISPLAY_HEIGHT: int = 1440
-USABLE_RADIUS: int = 450
+USABLE_RADIUS: int = 430
 DEBUG_SHOW_GRID: bool = False   # Set to True to display grid for motors limits
 
 # User screen position setup
@@ -237,17 +237,66 @@ def moveRobotToWorkingHome():
     moveRobotToHome(Z_WORKING)
 
 
-# Load robot movement path
-path = []
-with open("./path.json") as f:
-    path = json.load(f)
-    print("Path length: ", len(path))
-path_scale_x: float = 0.6
-path_scale_y: float = 1.0
+def getPath(file):
+    # Load robot movement path
+    with open("./path_r.json") as f:
+        path_json = json.load(f)
+        path = path_json["points"]
+        path_scale_x = path_json["path_scale_x"]
+        path_scale_y = path_json["path_scale_y"]
+        print("Path length:", len(path), "scale x:",
+              path_scale_x, "scale y:", path_scale_y)
+
+        return path, path_scale_x, path_scale_y
 
 
-def getPathPoint(path, i):
+def getPathPoint(path, path_scale_x, path_scale_y, i):
     return (int(path[i][0] * path_scale_x + DISPLAY_WIDTH // 2), int(path[i][1] * path_scale_y + DISPLAY_HEIGHT // 2))
+
+
+def followPath(path, path_scale_x, path_scale_y, period_descrease_ns=0, period_limit_ns=1_000, start_period_ns=10_000_000):
+    global last_time_ns, robot_x, robot_y
+
+    i = 0
+    x = y = 0
+
+    # Go to first point retracted
+    robot_x, robot_y = getPathPoint(path, path_scale_x, path_scale_y, i)
+    x, y = screenToRobot(
+        input_device, robot, (robot_x, robot_y))
+    if robot.moveBaseToXYZ((x, y, Z_RETRACTED)) != 0:
+        print("Error sending message")
+    sleep(0.5)
+
+    if robot.moveBaseToXYZ((x, y, Z_WORKING)) != 0:
+        print("Error sending message")
+
+    # Start following path unretracted in 2s
+    sleep(0.5)
+
+    while (i < len(path)):
+        if start_period_ns > period_limit_ns:
+            start_period_ns -= period_descrease_ns
+
+        if time_ns() - last_time_ns > start_period_ns:
+
+            # print("Current delta_ms between points: ", speed_delta_ns/1000.0)
+
+            robot_x, robot_y = getPathPoint(
+                path, path_scale_x, path_scale_y, i)
+            # print(f"New point: {robot_x}, {robot_y}")
+            x, y = screenToRobot(input_device, robot, (robot_x, robot_y))
+            if robot.moveBaseToXYZ((x, y, Z_WORKING)) != 0:
+                print("Error sending message")
+
+            i += 1
+
+            last_time_ns = time_ns()
+
+    # Gotten to the end, retracting in 0.5s
+    sleep(0.5)
+    if robot.moveBaseToXYZ((x, y, Z_RETRACTED)) != 0:
+        print("Error sending message")
 
 
 if __name__ == "__main__":
@@ -318,9 +367,7 @@ if __name__ == "__main__":
     FLAG_SEND_POSITION_TO_ROBOT = True
     DELTA_POSITION_WIN_LOOSE_THRESHOLD: int = 150
     winner = ""
-    speed_delta_ns: int = 1_000_000
     dxy = 0.0
-    i = 0
 
     # Flags to keep states init from running multiple times
     idle_state_init_done: bool = False
@@ -412,7 +459,7 @@ if __name__ == "__main__":
                 print(user_x, user_y, x, y)
 
                 if isInsideRadius(user_x, user_y, USABLE_RADIUS, int(DISPLAY_WIDTH/2), int(DISPLAY_HEIGHT/2)):
-                    if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
+                    if robot.moveBaseToXYZ((x, y, Z_WORKING)) != 0:
                         print("Error sending message")
                 else:
                     print("User position out of usable area")
@@ -433,8 +480,6 @@ if __name__ == "__main__":
                 GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.LOW)
                 GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.HIGH)
 
-                i = 0
-
                 sleep(1)
                 moveRobotToWorkingHome()
                 sleep(1)
@@ -444,23 +489,9 @@ if __name__ == "__main__":
                 # Robot wins against user
                 winner = "robot"
 
-            if speed_delta_ns > 1_000:
-                speed_delta_ns -= 10_000
-
-            if time_ns() - last_time_ns > speed_delta_ns:
-
-                print("Current delta_ms between points: ", speed_delta_ns/1000.0)
-
-                robot_x, robot_y = getPathPoint(path, i)
-                # print(f"New point: {robot_x}, {robot_y}")
-                x, y = screenToRobot(input_device, robot, (robot_x, robot_y))
-                if robot.moveBaseToXYZ((x, y, robot.operational_space.z_axis_max)) != 0:
-                    print("Error sending message")
-
-                i += 1
-                i %= len(path)
-
-                last_time_ns = time_ns()
+            path, path_scale_x, path_scale_y = getPath("./path_r.json")
+            followPath(path, path_scale_x, path_scale_y)
+            sleep(2)
 
             # Go to next mode (IDLE_STATE)
             if not FLAG_STAY_IN_FIRST_MODE and time_ns() - mode_duration_last_time_ns > ROBOT_FOLLOWS_DURATION_MS*1_000_000:
