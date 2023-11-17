@@ -275,11 +275,31 @@ if __name__ == "__main__":
         FLAG_STAY_IN_FIRST_MODE = True
     elif arg == "-t" or arg == "--test-cmd":
         print("Running in test mode\n--------------------\nAvailable commands:\n\
-    p - Position:   p0,0,-0.200  = moveBaseToXYZ(0, 0, -0.200) [m]\n\
-    c - Center:     c-0.200      = moveBaseToXYZ(0, 0, -0.200) [m]\n\
-    f - Flat plane: f0.010,0.020 = moveBaseToXYZ(0.010, 0.020, z_max) [m]\n\
-    a - Angles:     a0,0,30      = moveAllAxesTo(0, 0, 30) [°]\n\
-    z - Z axis:     z20          = moveAllAxesTo(20, 20, 20) [°]\n")
+    b  - Base position: p0,0,-0.200     = moveBaseToXYZ(0, 0, -0.200) [m]\n\
+    c  - Center:       c-0.200          = moveBaseToXYZ(0, 0, -0.200) [m]\n\
+    f  - Flat plane: f0.010,0.020       = moveBaseToXYZ(0.010, 0.020, z_max) [m]\n\
+    a  - Angles:     a0,0,30            = moveAllAxesTo(0, 0, 30) [°]\n\
+    z  - Z axis:     z20                = moveAllAxesTo(20, 20, 20) [°]\n\
+    h  - Home all axes: h1.5            = i1.5, sleep(1), j1.5, ...\n\
+    ha - Home A axis: h1.5              = moveHomeAxis(0x11, 1.5) [V]\n\
+    hb - Home B axis: i1.5              = moveHomeAxis(0x12, 1.5) [V]\n\
+    hc - Home C axis: j1.5              = moveHomeAxis(0x13, 1.5) [V]\n\
+    p  - Set P coef for all axis: p0.5  = setAllConstant(0, 0.5) [-]\n\
+    pa - Set P coef for A axis: pa0.5   = setConstant(0x11, 0, 0.5) [-]\n\
+    pb - Set P coef for B axis: pa0.5   = setConstant(0x12, 0, 0.5) [-]\n\
+    pc - Set P coef for C axis: pa0.5   = setConstant(0x13, 0, 0.5) [-]\n\
+    i  - Set I coef for all axis: i0.5  = setAllConstant(1, 0.5) [-]\n\
+    ia - Set I coef for A axis: ia0.5   = setConstant(0x11, 1, 0.5) [-]\n\
+    ib - Set I coef for B axis: ib0.5   = setConstant(0x12, 1, 0.5) [-]\n\
+    ic - Set I coef for C axis: ic0.5   = setConstant(0x13, 1, 0.5) [-]\n\
+    d  - Set D coef for all axis: d0.5  = setAllConstant(2, 0.5) [-]\n\
+    da - Set D coef for A axis: da0.5   = setConstant(0x11, 2, 0.5) [-]\n\
+    db - Set D coef for B axis: db0.5   = setConstant(0x12, 2, 0.5) [-]\n\
+    dc - Set D coef for C axis: dc0.5   = setConstant(0x13, 2, 0.5) [-]\n\
+    t  - Set Tau for all axis: t0.5     = setAllConstant(3, 0.5) [-]\n\
+    ta - Set Tau for A axis: ta0.5      = setConstant(0x11, 3, 0.5) [-]\n\
+    tb - Set Tau for B axis: ta0.5      = setConstant(0x12, 3, 0.5) [-]\n\
+    tc - Set Tau for C axis: ta0.5      = setConstant(0x13, 3, 0.5) [-]\n")
         game_mode: GameMode = GameMode.TEST_CMD
         FLAG_STAY_IN_FIRST_MODE = True
     else:
@@ -452,7 +472,7 @@ if __name__ == "__main__":
         elif game_mode == GameMode.TEST_CMD:
             input1 = input()
             type = input1[0]
-            if type == 'p':
+            if type == 'b':
                 x, y, z = input1[1:].split(',')
                 if robot.moveBaseToXYZ((float(x), float(y), float(z))) != 0:
                     print("Error sending message")
@@ -472,6 +492,71 @@ if __name__ == "__main__":
                 a = input1[1:]
                 if robot.moveAllAxesTo(float(a), float(a), float(a)) != 0:
                     print("Error sending message")
+            elif type == 'h':
+                subtype = input1[1]
+                if subtype not in ['a', 'b', 'c']:
+                    angle = 30
+                    a = input1[1:]
+                    if robot.moveHomeAxis(0x11, float(a)) != 0:
+                        print("Error sending homing message to motor A")
+                    sleep(4)
+                    # if robot.moveAxisTo(0x11, angle) != 0:
+                    #     print("Error sending return message to motor A")
+                    # sleep(2)
+
+                    if robot.moveHomeAxis(0x12, float(a)) != 0:
+                        print("Error sending homing message to motor B")
+                    sleep(4)
+                    # if robot.moveAxisTo(0x12, angle) != 0:
+                    #     print("Error sending return message to motor B")
+                    # sleep(2)
+
+                    if robot.moveHomeAxis(0x13, float(a)) != 0:
+                        print("Error sending homing message to motor C")
+                    sleep(4)
+                    # if robot.moveAxisTo(0x13, angle) != 0:
+                    #     print("Error sending return message to motor C")
+                    # sleep(2)
+
+                elif subtype == 'a':
+                    a = input1[2:]
+                    if robot.moveHomeAxis(0x11, float(a)) != 0:
+                        print("Error sending message")
+                elif subtype == 'b':
+                    a = input1[2:]
+                    if robot.moveHomeAxis(0x12, float(a)) != 0:
+                        print("Error sending message")
+                elif subtype == 'c':
+                    a = input1[2:]
+                    if robot.moveHomeAxis(0x13, float(a)) != 0:
+                        print("Error sending message")
+            elif type in ['p', 'i', 'd', 't']:
+                if type == 'p':
+                    type_value = 0
+                elif type == 'i':
+                    type_value = 1
+                elif type == 'd':
+                    type_value = 2
+                elif type == 't':
+                    type_value = 3
+
+                axis = input1[1]
+                if axis not in ['a', 'b', 'c']:
+                    a = input1[1:]
+                    if robot.setAllConstant(type_value, float(a)) != 0:
+                        print("Error sending message to motors")
+                else:
+                    if axis == 'a':
+                        axis_value = 0x11
+                    elif axis == 'b':
+                        axis_value = 0x12
+                    elif axis == 'c':
+                        axis_value = 0x13
+
+                    a = input1[2:]
+
+                    if robot.setConstant(axis_value, type_value, float(a)) != 0:
+                        print("Error sending message to motor")
 
         updateScreen()
 

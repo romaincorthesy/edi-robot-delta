@@ -5,16 +5,21 @@ import struct
 import GM_functions as GM
 import GM_functions_2 as GM2
 from math import *
+from enum import Enum
 
 
 class OperationalSpace:
-    """A class describing a cartesian coordinate system with axes limits.
-    """
+    """A class describing a cartesian coordinate system with axes limits."""
 
-    def __init__(self,
-                 x_axis_min: float, x_axis_max: float,
-                 y_axis_min: float, y_axis_max: float,
-                 z_axis_min: float, z_axis_max: float) -> None:
+    def __init__(
+        self,
+        x_axis_min: float,
+        x_axis_max: float,
+        y_axis_min: float,
+        y_axis_max: float,
+        z_axis_min: float,
+        z_axis_max: float,
+    ) -> None:
         self.x_axis_min = x_axis_min
         self.x_axis_max = x_axis_max
         self.y_axis_min = y_axis_min
@@ -45,9 +50,19 @@ class DeltaRobot:
         sudo interceptty /dev/ttyACM0 /dev/ttyCAP -v | interceptty-nicedump
         ```
     """
+
     DEBUG = False
 
-    def __init__(self, A_motor_id: int, B_motor_id: int, C_motor_id: int, A_encoder_id: int, B_encoder_id: int, C_encoder_id: int, sniff_traffic: bool = False) -> None:
+    def __init__(
+        self,
+        A_motor_id: int,
+        B_motor_id: int,
+        C_motor_id: int,
+        A_encoder_id: int,
+        B_encoder_id: int,
+        C_encoder_id: int,
+        sniff_traffic: bool = False,
+    ) -> None:
         self.A_motor_id = A_motor_id
         self.B_motor_id = B_motor_id
         self.C_motor_id = C_motor_id
@@ -62,25 +77,30 @@ class DeltaRobot:
         self.z = None
 
         self._bus = can.interface.Bus(
-            bustype='slcan', channel='/dev/ttyCAP' if sniff_traffic else '/dev/ttyACM0', bitrate=500000)
+            bustype="slcan",
+            channel="/dev/ttyCAP" if sniff_traffic else "/dev/ttyACM0",
+            bitrate=500000,
+        )
         self._notifier = can.Notifier(self._bus, [self._parse_data])
         self.callbackUpdate = None
 
         # Mechanical reality
-        self.GEAR_RATIO: float = 6.0
+        self.GEAR_RATIO: float = 1.0  # Previously 6.0
 
         # Physical operational space [m]
-        self.WORK_RADIUS: float = 0.200    # Radius of the usable range
-        MIN_X = -self.WORK_RADIUS/2
-        MAX_X = self.WORK_RADIUS/2
-        MIN_Y = -self.WORK_RADIUS/2
-        MAX_Y = self.WORK_RADIUS/2
+        # Diameter of the usable range  0.120 works well
+        self.WORK_DIAMETER: float = 0.120
+        MIN_X = -self.WORK_DIAMETER / 2
+        MAX_X = self.WORK_DIAMETER / 2
+        MIN_Y = -self.WORK_DIAMETER / 2
+        MAX_Y = self.WORK_DIAMETER / 2
         MIN_Z = -0.100
         MAX_Z = -0.150
         self.MIN_THETA = -40  # deg
         self.MAX_THETA = 80  # deg
         self.operational_space = OperationalSpace(
-            MIN_X, MAX_X, MIN_Y, MAX_Y, MIN_Z, MAX_Z)
+            MIN_X, MAX_X, MIN_Y, MAX_Y, MIN_Z, MAX_Z
+        )
 
     def __del__(self) -> None:
         self._notifier.stop()
@@ -116,7 +136,7 @@ class DeltaRobot:
         try:
             # pprint(msg)
             id = msg.arbitration_id
-            angle = struct.unpack('d', msg.data)[0] / self.GEAR_RATIO
+            angle = struct.unpack("d", msg.data)[0] / self.GEAR_RATIO
             if id == self.A_encoder_id:
                 self._angles[0] = angle
             elif id == self.B_encoder_id:
@@ -125,9 +145,11 @@ class DeltaRobot:
                 self._angles[2] = angle
             else:
                 print(
-                    f"Arbitration id options are:\n\t{self.A_encoder_id}\n\t{self.B_encoder_id}\n\t{self.C_encoder_id}")
+                    f"Arbitration id options are:\n\t{self.A_encoder_id}\n\t{self.B_encoder_id}\n\t{self.C_encoder_id}"
+                )
                 raise can.CanOperationError(
-                    f"Received message with unknown arbitration id: {id}")
+                    f"Received message with unknown arbitration id: {id}"
+                )
         except Exception as e:
             print("Error in _parse_data: {e}")
             raise e
@@ -151,11 +173,9 @@ class DeltaRobot:
         Returns:
             int: 1 if the message could not be sent, 0 otherwise
         """
-        msg = can.Message(arbitration_id=dest_id,
-                          data=data,
-                          is_extended_id=False,
-                          dlc=8,
-                          check=True)
+        msg = can.Message(
+            arbitration_id=dest_id, data=data, is_extended_id=False, dlc=8, check=True
+        )
 
         try:
             self._bus.send(msg)
@@ -172,44 +192,153 @@ class DeltaRobot:
         """Send a command to the robot to set a given axis to a given angle.
 
         Args:
-            axis_id (int): the CAN id a the motor driver board
+            axis_id (int): the CAN id of a the motor driver board
             angle (float): the angle in degrees to which the motor should go
 
         Returns:
             int: 1 if the command failed, 0 otherwise
         """
         # We adjusted the mechanical position of the arms by 30°
-        angle = angle + 30.0
+        # angle = angle + 30.0
 
         # Sign is stored separatly in the data frame
         processed_angle = abs(angle) * self.GEAR_RATIO
 
-        # Create the 4 parts of the data frame (control tyope, angle sign, angle integer part, angle decimal part)
-        control_type_in_hex = '03'  # 0x03 : position control
+        # Create the 4 parts of the data frame (control type, angle sign, angle integer part, angle decimal part)
+        control_type_in_hex = "03"  # 0x03 : position control
         # 0xff = negative angle, 0x00 = positive or zero
-        sign_in_hex = 'ff' if angle < 0 else '00'
+        sign_in_hex = "ff" if angle < 0 else "00"
         int_part = trunc(processed_angle)
-        dec_part = trunc((processed_angle - int_part)*100)
+        dec_part = trunc((processed_angle - int_part) * 100)
 
-        # Convert the dta frame parts in bytes
+        # Convert the data frame parts in bytes
         control_type_in_bytes = bytes.fromhex(control_type_in_hex)
         sign_in_bytes = bytes.fromhex(sign_in_hex)
-        int_part_in_bytes = int_part.to_bytes(2, 'big')
-        dec_part_in_bytes = dec_part.to_bytes(1, 'big')
+        int_part_in_bytes = int_part.to_bytes(2, "big")
+        dec_part_in_bytes = dec_part.to_bytes(1, "big")
 
         # Concat the data frame
-        data_unpaded = control_type_in_bytes + sign_in_bytes + \
-            int_part_in_bytes + dec_part_in_bytes
+        data_unpaded = (
+            control_type_in_bytes
+            + sign_in_bytes
+            + int_part_in_bytes
+            + dec_part_in_bytes
+        )
 
         # Pad data frame to be 8 bytes long
-        len_diff = 8-len(data_unpaded)
+        len_diff = 8 - len(data_unpaded)
         for _ in range(len_diff):
-            data_unpaded += b'\0'
+            data_unpaded += b"\0"
 
         # Convert data frame to byte array to be send
         data_paded = bytearray(data_unpaded)
 
         return self._sendMsg(axis_id, data_paded)
+
+    def moveHomeAxis(self, axis_id: int, voltage: float) -> int:
+        """Send the axis moving outward at small speed (voltage controled).
+        The driver will automatically switch to a voltage control with v_cmd = 0V when the index is found.
+
+        Args:
+            axis_id (int): The motor id (0x11 to 0x13)
+            voltage (float): Voltage to give the motor (1 to 3V should be good)
+
+        Returns:
+            int: 1 if the command failed, 0 otherwise
+        """
+        # Create the 4 parts of the data frame (control type, voltage sign, voltage integer part, voltage decimal part)
+        control_type_in_hex = "05"  # 0x05 : homing control
+        # 0xff = negative voltage, 0x00 = positive or zero
+        sign_in_hex = "ff" if voltage < 0 else "00"
+        int_part = trunc(abs(voltage))
+        dec_part = trunc((abs(voltage) - int_part) * 100)
+
+        # Convert the data frame parts in bytes
+        control_type_in_bytes = bytes.fromhex(control_type_in_hex)
+        sign_in_bytes = bytes.fromhex(sign_in_hex)
+        int_part_in_bytes = int_part.to_bytes(2, "big")
+        dec_part_in_bytes = dec_part.to_bytes(1, "big")
+
+        # Concat the data frame
+        data_unpaded = (
+            control_type_in_bytes
+            + sign_in_bytes
+            + int_part_in_bytes
+            + dec_part_in_bytes
+        )
+
+        # Pad data frame to be 8 bytes long
+        len_diff = 8 - len(data_unpaded)
+        for _ in range(len_diff):
+            data_unpaded += b"\0"
+
+        # Convert data frame to byte array to be send
+        data_paded = bytearray(data_unpaded)
+
+        return self._sendMsg(axis_id, data_paded)
+
+    def setConstant(self, axis_id: int, constant_type: int, value: float) -> int:
+        """Send a command to change the coefficent of regulation or the LPF time constant.
+
+        Args:
+            axis_id (int): the CAN id of a the motor driver board.
+            constant_type (int): the constant to change 0: P, 1: I, 2: D or 3: Tau.
+            value (float): the new value for the constant.
+
+        Returns:
+            int: 1 if the command failed, 0 otherwise
+        """
+        # Sign is stored separatly in the data frame
+        processed_value = abs(value)
+
+        # Create the 5 parts of the data frame (control type, value sign, value integer part, value decimal part, pid type)
+        control_type_in_hex = "06"  # 0x06 : pid setting
+        # 0xff = negative value, 0x00 = positive or zero
+        sign_in_hex = "ff" if value < 0 else "00"
+        int_part = trunc(processed_value)
+        dec_part = trunc((processed_value - int_part) * 100)
+
+        # Convert the data frame parts in bytes
+        control_type_in_bytes = bytes.fromhex(control_type_in_hex)
+        sign_in_bytes = bytes.fromhex(sign_in_hex)
+        int_part_in_bytes = int_part.to_bytes(2, "big")
+        dec_part_in_bytes = dec_part.to_bytes(1, "big")
+        constant_type_in_byte = constant_type.to_bytes(1, "big")
+
+        # Concat the data frame
+        data_unpaded = (
+            control_type_in_bytes
+            + sign_in_bytes
+            + int_part_in_bytes
+            + dec_part_in_bytes
+            + constant_type_in_byte
+        )
+
+        # Pad data frame to be 8 bytes long
+        len_diff = 8 - len(data_unpaded)
+        for _ in range(len_diff):
+            data_unpaded += b"\0"
+
+        # Convert data frame to byte array to be send
+        data_paded = bytearray(data_unpaded)
+
+        return self._sendMsg(axis_id, data_paded)
+
+    def setAllConstant(self, constant_type: int, value: float) -> int:
+        """Send a command to change the coefficent of regulation or the LPF time constant of all axes.
+
+        Args:
+            constant_type (int): the constant to change 0: P, 1: I, 2: D or 3: Tau.
+            value (float): the new value for the coefficent.
+
+        Returns:
+            int: a bit superposition if the command failed (0b0CBA), 0 otherwise
+        """
+        ret_A = self.setConstant(self.A_motor_id, constant_type, value)
+        ret_B = self.setConstant(self.B_motor_id, constant_type, value)
+        ret_C = self.setConstant(self.C_motor_id, constant_type, value)
+
+        return ret_A + 2 * ret_B + 4 * ret_C
 
     def moveAllAxesTo(self, angle_A: float, angle_B: float, angle_C: float) -> int:
         """Send a command to the robot to set all axes to a given set of angles.
@@ -226,7 +355,7 @@ class DeltaRobot:
         ret_B = self.moveAxisTo(self.B_motor_id, angle_B)
         ret_C = self.moveAxisTo(self.C_motor_id, angle_C)
 
-        return ret_A + 2*ret_B + 4*ret_C
+        return ret_A + 2 * ret_B + 4 * ret_C
 
     def moveBaseToXYZ(self, xyz_coord: tuple[float, float, float]) -> int:
         """Move the base of the robot to a x,y,z point in the operational space
@@ -260,7 +389,8 @@ class DeltaRobot:
 
         X_op_rounded = tuple([round(x, GM.GM_PRECISION) for x in X_op])
         Q_art = GM2.getAnglesDegreesFromPosition(
-            X_op_rounded, self.MIN_THETA, self.MAX_THETA, self.WORK_RADIUS, silent=True)
+            X_op_rounded, self.MIN_THETA, self.MAX_THETA, self.WORK_DIAMETER, silent=True
+        )
 
         return Q_art
 
@@ -268,12 +398,13 @@ class DeltaRobot:
         X_op_rounded = tuple([round(x, GM.GM_PRECISION) for x in X_op])
         if DeltaRobot.DEBUG:
             (x, y, z) = X_op_rounded
-            Q_art = [x/100.0, y/100.0, z/100.0]
+            Q_art = [x / 100.0, y / 100.0, z / 100.0]
         else:
             Q_art, err = GM.Rot_Inv_Geometric_Model(X_op_rounded)
             if err != 0:
                 raise ArithmeticError(
-                    f"Rot_Inv_Geometric_Model returned error number {err}")
+                    f"Rot_Inv_Geometric_Model returned error number {err}"
+                )
             Q_art = [round(q, GM.GM_PRECISION) for q in Q_art]
 
         return tuple([degrees(a) for a in Q_art])
@@ -291,16 +422,16 @@ class DeltaRobot:
             tuple[float, float, float]: the position reached with the three given motor angles
         """
         X_op: tuple[float, float, float] = None
-        Q_art_rounded = tuple(
-            [round(q, GM.GM_PRECISION) for q in Q_art])
+        Q_art_rounded = tuple([round(q, GM.GM_PRECISION) for q in Q_art])
         if DeltaRobot.DEBUG:
             (x, y, z) = Q_art_rounded
-            X_op = [x*100.0, y*100.0, z*100.0]
+            X_op = [x * 100.0, y * 100.0, z * 100.0]
         else:
             X_op, err = GM.Rot_Dir_Geometric_Model(Q_art_rounded)
             if err != 0:
                 raise ArithmeticError(
-                    f"Rot_Dir_Geometric_Model returned error number {err}")
+                    f"Rot_Dir_Geometric_Model returned error number {err}"
+                )
             X_op = [round(x, GM.GM_PRECISION) for x in X_op]
 
         return X_op
