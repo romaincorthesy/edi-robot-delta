@@ -247,7 +247,7 @@ class DeltaRobot:
             int: 1 if the command failed, 0 otherwise
         """
         # Create the 4 parts of the data frame (control type, voltage sign, voltage integer part, voltage decimal part)
-        control_type_in_hex = "05"  # 0x05 : homing control
+        control_type_in_hex = "05"  # 0x05 : homing voltage control
         # 0xff = negative voltage, 0x00 = positive or zero
         sign_in_hex = "ff" if voltage < 0 else "00"
         int_part = trunc(abs(voltage))

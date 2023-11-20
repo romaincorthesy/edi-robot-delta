@@ -13,8 +13,8 @@ from InputDevice import Touchfoil, Mouse, IInputDevice
 from OutputDevice import DeltaRobot
 
 # GPIO definitions
-USER_FOLLOWS_PANEL_PIN: int = 23
-ROBOT_FOLLOWS_PANEL_PIN: int = 24
+RIGHT_PANEL_PIN: int = 23
+LEFT_PANEL_PIN: int = 24
 BUTTON_PIN: int = 18
 
 # Color constants
@@ -26,10 +26,11 @@ GRAY = (200, 200, 200)
 # Screen setup
 DISPLAY_WIDTH: int = 1440
 DISPLAY_HEIGHT: int = 1440
-USABLE_RADIUS: int = 430
+USABLE_RADIUS: int = 430    # Black circle drawn on screen [px]
 DEBUG_SHOW_GRID: bool = False   # Set to True to display grid for motors limits
 
 # User screen position setup
+# Range in which no new position is sent to the robot [px]
 USER_DIFF_THRESHOLD: int = 1
 user_x: int = 0
 user_y: int = 0
@@ -37,17 +38,16 @@ user_y: int = 0
 # Robot screen position setup
 robot_x: int = 0
 robot_y: int = 0
-FAKE_ROBOT_DELAY_MS: int = 100
-last_time_ns: int = time_ns()
+last_time_ns: int = time_ns()   # Path following speed up timer intialization
 
 # Robot home z positions
 Z_RETRACTED = -0.120
 Z_WORKING = -0.150
 
-
 # Duration of the modes
 ROBOT_FOLLOWS_DURATION_MS: int = 20_000
 USER_FOLLOWS_DURATION_MS: int = 20_000
+# Mode duration timer initialization
 mode_duration_last_time_ns: int = time_ns()
 
 # If this flag is set to True, the game stays in the mode in wich it was started, useful for testing the modes.
@@ -95,14 +95,6 @@ def updateScreen() -> None:
     # Input device radius
     pygame.draw.circle(screen, BLACK, (int(DISPLAY_WIDTH/2),
                                        int(DISPLAY_HEIGHT/2)), USABLE_RADIUS, 1)
-
-    # Output device radius
-    #! TODO : THIS DOESN'T WORK
-    # work_radius = int(SC.remap(0, robot.operational_space.x_axis_max,
-    #                   0, USABLE_RADIUS, robot.WORK_RADIUS))
-    # print("work radius:", work_radius)
-    # pygame.draw.circle(screen, RED, (int(DISPLAY_WIDTH/2),
-    #                                  int(DISPLAY_HEIGHT/2)), work_radius, 1)
 
     if winner == "user":
         userWon()
@@ -197,6 +189,18 @@ def robotToScreen(robot: DeltaRobot, input_device: IInputDevice) -> tuple[float,
 
 
 def isInsideRadius(x: int, y: int, radius: int, center_x: int, center_y: int) -> bool:
+    """_summary_
+
+    Args:
+        x (int): _description_
+        y (int): _description_
+        radius (int): _description_
+        center_x (int): _description_
+        center_y (int): _description_
+
+    Returns:
+        bool: _description_
+    """
     dx = x - center_x
     dy = y - center_y
     point_radius = sqrt(dx**2 + dy**2)
@@ -239,7 +243,7 @@ def moveRobotToWorkingHome():
 
 def getPath(file):
     # Load robot movement path
-    with open("./path_r.json") as f:
+    with open(file) as f:
         path_json = json.load(f)
         path = path_json["points"]
         path_scale_x = path_json["path_scale_x"]
@@ -271,7 +275,7 @@ def followPath(path, path_scale_x, path_scale_y, period_descrease_ns=0, period_l
     if robot.moveBaseToXYZ((x, y, Z_WORKING)) != 0:
         print("Error sending message")
 
-    # Start following path unretracted in 2s
+    # Start following path unretracted in 0.5s
     sleep(0.5)
 
     while (i < len(path)):
@@ -329,7 +333,8 @@ if __name__ == "__main__":
     f  - Flat plane: f0.010,0.020       = moveBaseToXYZ(0.010, 0.020, z_max) [m]\n\
     a  - Angles:     a0,0,30            = moveAllAxesTo(0, 0, 30) [°]\n\
     z  - Z axis:     z20                = moveAllAxesTo(20, 20, 20) [°]\n\
-    h  - Home all axes: h1.5            = i1.5, sleep(1), j1.5, ...\n\
+    hh - Home all axes auto: hh         = ha3, sleep(1), hb3, sleep(1), hc6, ...\n\
+    h  - Home all axes: h1.5            = ha1.5, sleep(1), hb1.5, ...\n\
     ha - Home A axis: h1.5              = moveHomeAxis(0x11, 1.5) [V]\n\
     hb - Home B axis: i1.5              = moveHomeAxis(0x12, 1.5) [V]\n\
     hc - Home C axis: j1.5              = moveHomeAxis(0x13, 1.5) [V]\n\
@@ -391,8 +396,8 @@ if __name__ == "__main__":
     # Setup GPIO
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
-    GPIO.setup(ROBOT_FOLLOWS_PANEL_PIN, GPIO.OUT)
-    GPIO.setup(USER_FOLLOWS_PANEL_PIN, GPIO.OUT)
+    GPIO.setup(LEFT_PANEL_PIN, GPIO.OUT)
+    GPIO.setup(RIGHT_PANEL_PIN, GPIO.OUT)
     GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
     # Main loop
@@ -421,8 +426,8 @@ if __name__ == "__main__":
         if game_mode == GameMode.IDLE_STATE:
             if not idle_state_init_done:
                 # This must be done only once when entering the state
-                GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.LOW)
-                GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.LOW)
+                GPIO.output(RIGHT_PANEL_PIN, GPIO.LOW)
+                GPIO.output(LEFT_PANEL_PIN, GPIO.LOW)
 
                 moveRobotToWorkingHome()
                 sleep(1)
@@ -440,8 +445,8 @@ if __name__ == "__main__":
         elif game_mode == GameMode.ROBOT_FOLLOWS:
             if not robot_follows_state_init_done:
                 # This must be done only once when entering the state
-                GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.LOW)
-                GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.HIGH)
+                GPIO.output(RIGHT_PANEL_PIN, GPIO.LOW)
+                GPIO.output(LEFT_PANEL_PIN, GPIO.HIGH)
 
                 sleep(1)
                 moveRobotToWorkingHome()
@@ -477,8 +482,8 @@ if __name__ == "__main__":
         elif game_mode == GameMode.USER_FOLLOWS:
             if not robot_follows_state_init_done:
                 # This must be done only once when entering the state
-                GPIO.output(ROBOT_FOLLOWS_PANEL_PIN, GPIO.LOW)
-                GPIO.output(USER_FOLLOWS_PANEL_PIN, GPIO.HIGH)
+                GPIO.output(LEFT_PANEL_PIN, GPIO.LOW)
+                GPIO.output(RIGHT_PANEL_PIN, GPIO.HIGH)
 
                 sleep(1)
                 moveRobotToWorkingHome()
@@ -525,29 +530,29 @@ if __name__ == "__main__":
                     print("Error sending message")
             elif type == 'h':
                 subtype = input1[1]
-                if subtype not in ['a', 'b', 'c']:
+                if subtype not in ['a', 'b', 'c', 'h']:
                     angle = 30
                     a = input1[1:]
                     if robot.moveHomeAxis(0x11, float(a)) != 0:
                         print("Error sending homing message to motor A")
                     sleep(4)
-                    # if robot.moveAxisTo(0x11, angle) != 0:
-                    #     print("Error sending return message to motor A")
-                    # sleep(2)
+                    if robot.moveAxisTo(0x11, angle) != 0:
+                        print("Error sending return message to motor A")
+                    sleep(2)
 
                     if robot.moveHomeAxis(0x12, float(a)) != 0:
                         print("Error sending homing message to motor B")
                     sleep(4)
-                    # if robot.moveAxisTo(0x12, angle) != 0:
-                    #     print("Error sending return message to motor B")
-                    # sleep(2)
+                    if robot.moveAxisTo(0x12, angle) != 0:
+                        print("Error sending return message to motor B")
+                    sleep(2)
 
                     if robot.moveHomeAxis(0x13, float(a)) != 0:
                         print("Error sending homing message to motor C")
                     sleep(4)
-                    # if robot.moveAxisTo(0x13, angle) != 0:
-                    #     print("Error sending return message to motor C")
-                    # sleep(2)
+                    if robot.moveAxisTo(0x13, angle) != 0:
+                        print("Error sending return message to motor C")
+                    sleep(2)
 
                 elif subtype == 'a':
                     a = input1[2:]
@@ -560,6 +565,31 @@ if __name__ == "__main__":
                 elif subtype == 'c':
                     a = input1[2:]
                     if robot.moveHomeAxis(0x13, float(a)) != 0:
+                        print("Error sending message")
+                elif subtype == 'h':
+                    angle = 30
+                    if robot.moveHomeAxis(0x11, 3.0) != 0:
+                        print("Error sending homing message to motor A")
+                    sleep(3)
+                    if robot.moveAxisTo(0x11, angle) != 0:
+                        print("Error sending return message to motor A")
+                    sleep(2)
+
+                    if robot.moveHomeAxis(0x12, 6.0) != 0:
+                        print("Error sending homing message to motor B")
+                    sleep(3)
+                    if robot.moveAxisTo(0x12, angle) != 0:
+                        print("Error sending return message to motor B")
+                    sleep(2)
+
+                    if robot.moveHomeAxis(0x13, 3.0) != 0:
+                        print("Error sending homing message to motor C")
+                    sleep(3)
+                    if robot.moveAxisTo(0x13, angle) != 0:
+                        print("Error sending return message to motor C")
+                    sleep(2)
+
+                    if robot.moveBaseToXYZ((0, 0, Z_WORKING)) != 0:
                         print("Error sending message")
             elif type in ['p', 'i', 'd', 't']:
                 if type == 'p':
