@@ -54,6 +54,9 @@ mode_duration_last_time_ns: int = time_ns()
 # Running the game whith the -r, -u or -t flag will set it to True, running it whith no arg (expo mode) will set it to false.
 FLAG_STAY_IN_FIRST_MODE: bool = False
 
+# Debug robot limits display points
+points: list[tuple[int, int, tuple[int, int, int]]] = []
+
 
 class GameMode(Enum):
     IDLE_STATE = 0
@@ -104,7 +107,7 @@ def updateScreen() -> None:
     pygame.display.update()
 
 
-# Input device
+# Input device update callback
 def updateCallback(device: IInputDevice) -> None:
     """Function called when the input device fires a event indicating a new position. Update user position.
 
@@ -124,18 +127,6 @@ def updateCallback(device: IInputDevice) -> None:
             user_x = device.x
             user_y = device.y
             FLAG_SEND_POSITION_TO_ROBOT = True
-
-
-# input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
-input_device = Mouse(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH,
-                     screen_usable_height=2*USABLE_RADIUS, screen_usable_width=2*USABLE_RADIUS)
-input_device.callbackUpdate = updateCallback
-
-
-# Output device
-robot = DeltaRobot(A_motor_id=0x11, B_motor_id=0x12, C_motor_id=0x13,
-                   A_encoder_id=0x11, B_encoder_id=0x12, C_encoder_id=0x13,
-                   sniff_traffic=False)
 
 
 def screenToRobot(input_device: IInputDevice, robot: DeltaRobot, force_value: tuple[int, int] = None) -> tuple[float, float]:
@@ -226,19 +217,22 @@ def moveRobotToHome(z_pos: float):
     """
     home_x, home_y = screenToRobot(input_device, robot, force_value=(
         DISPLAY_WIDTH // 2, DISPLAY_HEIGHT // 2))
-    robot.moveBaseToXYZ((home_x, home_y, z_pos))
+    res = robot.moveBaseToXYZ((home_x, home_y, z_pos))
+    if res != 0:
+        print("Error sending message in moveRobotToHome")
+    return res
 
 
 def moveRobotToRetractedHome():
     """Move the robot to the center of the screen, in the retracted position (waiting position).
     """
-    moveRobotToHome(Z_RETRACTED)
+    return moveRobotToHome(Z_RETRACTED)
 
 
 def moveRobotToWorkingHome():
     """Move the robot to the center of the screen near the glass (working starting position).
     """
-    moveRobotToHome(Z_WORKING)
+    return moveRobotToHome(Z_WORKING)
 
 
 def getPath(file):
@@ -333,40 +327,21 @@ def runHomingSequence():
     sleep(2)
 
     print("Move robot to Z_WORKING and then Z_RETRACTED after 1s")
-    if robot.moveBaseToXYZ((0, 0, Z_WORKING)) != 0:
-        print("Error sending message")
+    moveRobotToWorkingHome()
     sleep(1)
-    if robot.moveBaseToXYZ((0, 0, Z_RETRACTED)) != 0:
-        print("Error sending message")
+    moveRobotToRetractedHome()
 
 
-if __name__ == "__main__":
-    import sys
-
-    # Get argument to set GameMode
-    if len(sys.argv) > 1:   # sys.argv[0] : fileName
-        arg = sys.argv[1]
-    else:
-        arg = None
-
+def printScriptRunFlags():
     print(f"\nThis file ({sys.argv[0]}) can be optionnaly run with one of these flags:\n\
     -u, --user-follows  : try to follow the robot as fast as you can. The homing sequence WILL be run.\n\
     -r, --robot-follows : try to outspeed the robot. The homing sequence WILL be run.\n\
     -t, --test-cmd      : send commands to test that the robot is working as intended. The homing sequence WILL NOT be run.\n\
     without args        : run in standard use (expo). The homing sequence WILL be run.")
 
-    if arg == "-u" or arg == "--user-follows":
-        print("Running in user-follows mode: try to follow the robot as fast as you can\n")
-        game_mode: GameMode = GameMode.USER_FOLLOWS
-        FLAG_STAY_IN_FIRST_MODE = True
-        runHomingSequence()
-    elif arg == "-r" or arg == "--robot-follows":
-        print("Running in robot-follows: try to outspeed the robot")
-        game_mode: GameMode = GameMode.ROBOT_FOLLOWS
-        FLAG_STAY_IN_FIRST_MODE = True
-        runHomingSequence()
-    elif arg == "-t" or arg == "--test-cmd":
-        print("Running in test mode\n--------------------\nAvailable commands:\n\
+
+def printAvailableTestCommands():
+    print("Running in test mode\n--------------------\nAvailable commands:\n\
     b  - Base position:           p0,0,-0.200 = moveBaseToXYZ(0, 0, -0.200) [m]\n\
     c  - Center:                  c-0.200     = moveBaseToXYZ(0, 0, -0.200) [m]\n\
     f  - Flat plane:              f0.01,0.02  = moveBaseToXYZ(0.010, 0.020, z_max) [m]\n\
@@ -393,6 +368,79 @@ if __name__ == "__main__":
     ta - Set Tau for A axis:      ta0.5       = setConstant(0x11, 3, 0.5) [-]\n\
     tb - Set Tau for B axis:      tb0.5       = setConstant(0x12, 3, 0.5) [-]\n\
     tc - Set Tau for C axis:      tc0.5       = setConstant(0x13, 3, 0.5) [-]\n")
+
+
+def turnOffBothPanels():
+    GPIO.output(RIGHT_PANEL_PIN, GPIO.LOW)
+    GPIO.output(LEFT_PANEL_PIN, GPIO.LOW)
+
+
+def turnOnLeftPanel():
+    GPIO.output(RIGHT_PANEL_PIN, GPIO.LOW)
+    GPIO.output(LEFT_PANEL_PIN, GPIO.HIGH)
+
+
+def turnOnRightPanel():
+    GPIO.output(LEFT_PANEL_PIN, GPIO.LOW)
+    GPIO.output(RIGHT_PANEL_PIN, GPIO.HIGH)
+
+
+def resetModeDurationTimer():
+    global mode_duration_last_time_ns
+    mode_duration_last_time_ns = time_ns()
+
+
+def calculateRobotLimits():
+    global points
+    print("Calculating motors limits...")
+    for x in range(0, DISPLAY_WIDTH, 4):
+        for y in range(0, DISPLAY_HEIGHT, 4):
+            x_r, y_r = screenToRobot(input_device, robot, (x, y))
+            try:
+                angle_A, angle_B, angle_C = robot.IGM(
+                    (x_r, y_r, robot.operational_space.z_axis_max))
+                points.append((int(x), int(y), GREEN))
+            except ValueError:
+                points.append((int(x), int(y), RED))
+    print("Done calculating. Everything's gonna be sloooow")
+
+
+# input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
+input_device = Mouse(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH,
+                     screen_usable_height=2*USABLE_RADIUS, screen_usable_width=2*USABLE_RADIUS)
+input_device.callbackUpdate = updateCallback
+
+
+# Output device
+robot = DeltaRobot(A_motor_id=0x11, B_motor_id=0x12, C_motor_id=0x13,
+                   A_encoder_id=0x11, B_encoder_id=0x12, C_encoder_id=0x13,
+                   sniff_traffic=False)
+
+
+if __name__ == "__main__":
+    import sys
+
+    # Get argument to set GameMode
+    if len(sys.argv) > 1:   # sys.argv[0] : fileName
+        arg = sys.argv[1]
+    else:
+        arg = None
+
+    printScriptRunFlags()
+
+    # Set GameMode according to run flags
+    if arg == "-u" or arg == "--user-follows":
+        print("Running in user-follows mode: try to follow the robot as fast as you can\n")
+        game_mode: GameMode = GameMode.USER_FOLLOWS
+        FLAG_STAY_IN_FIRST_MODE = True
+        runHomingSequence()
+    elif arg == "-r" or arg == "--robot-follows":
+        print("Running in robot-follows: try to outspeed the robot")
+        game_mode: GameMode = GameMode.ROBOT_FOLLOWS
+        FLAG_STAY_IN_FIRST_MODE = True
+        runHomingSequence()
+    elif arg == "-t" or arg == "--test-cmd":
+        printAvailableTestCommands()
         game_mode: GameMode = GameMode.TEST_CMD
         FLAG_STAY_IN_FIRST_MODE = True
     else:
@@ -420,18 +468,8 @@ if __name__ == "__main__":
     user_follows_state_init_done: bool = False
 
     if DEBUG_SHOW_GRID:
-        print("Calculating motors limits...")
-        points: list[tuple[int, int, tuple[int, int, int]]] = []
-        for x in range(0, DISPLAY_WIDTH, 4):
-            for y in range(0, DISPLAY_HEIGHT, 4):
-                x_r, y_r = screenToRobot(input_device, robot, (x, y))
-                try:
-                    angle_A, angle_B, angle_C = robot.IGM(
-                        (x_r, y_r, robot.operational_space.z_axis_max))
-                    points.append((int(x), int(y), GREEN))
-                except ValueError:
-                    points.append((int(x), int(y), RED))
-        print("Done calculating. Everything's gonna be sloooow")
+        # Calculate limits that will be printed in updateScreen()
+        calculateRobotLimits()
 
     # Setup GPIO
     GPIO.setmode(GPIO.BCM)
@@ -463,11 +501,11 @@ if __name__ == "__main__":
         dy = user_y - robot_y
         dxy = sqrt(dx*dx + dy*dy)
 
+        # ---- State machine ----
         if game_mode == GameMode.IDLE_STATE:
             if not idle_state_init_done:
                 # This must be done only once when entering the state
-                GPIO.output(RIGHT_PANEL_PIN, GPIO.LOW)
-                GPIO.output(LEFT_PANEL_PIN, GPIO.LOW)
+                turnOffBothPanels()
 
                 moveRobotToWorkingHome()
                 sleep(1)
@@ -478,15 +516,12 @@ if __name__ == "__main__":
             if GPIO.input(BUTTON_PIN) == GPIO.LOW:
                 idle_state_init_done = False
                 game_mode = GameMode.ROBOT_FOLLOWS
-
-                # Start a timer for the duration of the ROBOT_FOLLOWS state
-                mode_duration_last_time_ns = time_ns()
+                resetModeDurationTimer()
 
         elif game_mode == GameMode.ROBOT_FOLLOWS:
             if not robot_follows_state_init_done:
                 # This must be done only once when entering the state
-                GPIO.output(RIGHT_PANEL_PIN, GPIO.LOW)
-                GPIO.output(LEFT_PANEL_PIN, GPIO.HIGH)
+                turnOnLeftPanel()
 
                 sleep(1)
                 moveRobotToWorkingHome()
@@ -509,21 +544,19 @@ if __name__ == "__main__":
                 else:
                     print("User position out of usable area")
 
-            # Go to next mode (USER_FOLLOWS)
+            # Go to next mode (USER_FOLLOWS) after USER_FOLLOWS_DURATION_MS ms
             if not FLAG_STAY_IN_FIRST_MODE and time_ns() - mode_duration_last_time_ns > USER_FOLLOWS_DURATION_MS*1_000_000:
                 sleep(1)
                 moveRobotToRetractedHome()
                 sleep(2)
                 robot_follows_state_init_done = False
                 game_mode = GameMode.USER_FOLLOWS
-
-                mode_duration_last_time_ns = time_ns()
+                resetModeDurationTimer()
 
         elif game_mode == GameMode.USER_FOLLOWS:
             if not robot_follows_state_init_done:
                 # This must be done only once when entering the state
-                GPIO.output(LEFT_PANEL_PIN, GPIO.LOW)
-                GPIO.output(RIGHT_PANEL_PIN, GPIO.HIGH)
+                turnOnRightPanel()
 
                 sleep(1)
                 moveRobotToWorkingHome()
@@ -534,16 +567,16 @@ if __name__ == "__main__":
                 # Robot wins against user
                 winner = "robot"
 
+            # Follow the path
             path, path_scale_x, path_scale_y = getPath("./path_r.json")
             followPath(path, path_scale_x, path_scale_y)
             sleep(2)
 
-            # Go to next mode (IDLE_STATE)
+            # Go to next mode (IDLE_STATE) after ROBOT_FOLLOWS_DURATION_MS ms
             if not FLAG_STAY_IN_FIRST_MODE and time_ns() - mode_duration_last_time_ns > ROBOT_FOLLOWS_DURATION_MS*1_000_000:
                 robot_follows_state_init_done = False
                 game_mode = GameMode.IDLE_STATE
-
-                mode_duration_last_time_ns = time_ns()
+                resetModeDurationTimer()
 
         elif game_mode == GameMode.TEST_CMD:
             input1 = input()
