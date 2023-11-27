@@ -303,6 +303,43 @@ def followPath(path, path_scale_x, path_scale_y, period_descrease_ns=0, period_l
         print("Error sending message")
 
 
+def runHomingSequence():
+    angle = 30
+    print("Start axis A homing and wait 3s.")
+    if robot.moveHomeAxis(0x11, 6.0) != 0:
+        print("Error sending homing message to motor A")
+    sleep(3)
+    print("Move axis A to", angle, "° and wait 2s.")
+    if robot.moveAxisTo(0x11, angle) != 0:
+        print("Error sending return message to motor A")
+    sleep(2)
+
+    print("Start axis B homing and wait 3s.")
+    if robot.moveHomeAxis(0x12, 8.0) != 0:
+        print("Error sending homing message to motor B")
+    sleep(3)
+    print("Move axis B to", angle, "° and wait 2s.")
+    if robot.moveAxisTo(0x12, angle) != 0:
+        print("Error sending return message to motor B")
+    sleep(2)
+
+    print("Start axis C homing and wait 3s.")
+    if robot.moveHomeAxis(0x13, 8.0) != 0:
+        print("Error sending homing message to motor C")
+    sleep(3)
+    print("Move axis C to", angle, "° and wait 2s.")
+    if robot.moveAxisTo(0x13, angle) != 0:
+        print("Error sending return message to motor C")
+    sleep(2)
+
+    print("Move robot to Z_WORKING and then Z_RETRACTED after 1s")
+    if robot.moveBaseToXYZ((0, 0, Z_WORKING)) != 0:
+        print("Error sending message")
+    sleep(1)
+    if robot.moveBaseToXYZ((0, 0, Z_RETRACTED)) != 0:
+        print("Error sending message")
+
+
 if __name__ == "__main__":
     import sys
 
@@ -313,53 +350,56 @@ if __name__ == "__main__":
         arg = None
 
     print(f"\nThis file ({sys.argv[0]}) can be optionnaly run with one of these flags:\n\
-    -u, --user-follows  : try to follow the robot as fast as you can\n\
-    -r, --robot-follows : try to outspeed the robot\n\
-    -t, --test-cmd      : send commands to test that the robot is working as intended\n")
+    -u, --user-follows  : try to follow the robot as fast as you can. The homing sequence WILL be run.\n\
+    -r, --robot-follows : try to outspeed the robot. The homing sequence WILL be run.\n\
+    -t, --test-cmd      : send commands to test that the robot is working as intended. The homing sequence WILL NOT be run.\n\
+    without args        : run in standard use (expo). The homing sequence WILL be run.")
 
     if arg == "-u" or arg == "--user-follows":
         print("Running in user-follows mode: try to follow the robot as fast as you can\n")
         game_mode: GameMode = GameMode.USER_FOLLOWS
         FLAG_STAY_IN_FIRST_MODE = True
+        runHomingSequence()
     elif arg == "-r" or arg == "--robot-follows":
         print("Running in robot-follows: try to outspeed the robot")
         game_mode: GameMode = GameMode.ROBOT_FOLLOWS
         FLAG_STAY_IN_FIRST_MODE = True
-        FLAG_STAY_IN_FIRST_MODE = True
+        runHomingSequence()
     elif arg == "-t" or arg == "--test-cmd":
         print("Running in test mode\n--------------------\nAvailable commands:\n\
-    b  - Base position: p0,0,-0.200     = moveBaseToXYZ(0, 0, -0.200) [m]\n\
-    c  - Center:       c-0.200          = moveBaseToXYZ(0, 0, -0.200) [m]\n\
-    f  - Flat plane: f0.010,0.020       = moveBaseToXYZ(0.010, 0.020, z_max) [m]\n\
-    a  - Angles:     a0,0,30            = moveAllAxesTo(0, 0, 30) [°]\n\
-    z  - Z axis:     z20                = moveAllAxesTo(20, 20, 20) [°]\n\
-    hh - Home all axes auto: hh         = ha3, sleep(1), hb3, sleep(1), hc6, ...\n\
-    h  - Home all axes: h1.5            = ha1.5, sleep(1), hb1.5, ...\n\
-    ha - Home A axis: h1.5              = moveHomeAxis(0x11, 1.5) [V]\n\
-    hb - Home B axis: i1.5              = moveHomeAxis(0x12, 1.5) [V]\n\
-    hc - Home C axis: j1.5              = moveHomeAxis(0x13, 1.5) [V]\n\
-    p  - Set P coef for all axis: p0.5  = setAllConstant(0, 0.5) [-]\n\
-    pa - Set P coef for A axis: pa0.5   = setConstant(0x11, 0, 0.5) [-]\n\
-    pb - Set P coef for B axis: pa0.5   = setConstant(0x12, 0, 0.5) [-]\n\
-    pc - Set P coef for C axis: pa0.5   = setConstant(0x13, 0, 0.5) [-]\n\
-    i  - Set I coef for all axis: i0.5  = setAllConstant(1, 0.5) [-]\n\
-    ia - Set I coef for A axis: ia0.5   = setConstant(0x11, 1, 0.5) [-]\n\
-    ib - Set I coef for B axis: ib0.5   = setConstant(0x12, 1, 0.5) [-]\n\
-    ic - Set I coef for C axis: ic0.5   = setConstant(0x13, 1, 0.5) [-]\n\
-    d  - Set D coef for all axis: d0.5  = setAllConstant(2, 0.5) [-]\n\
-    da - Set D coef for A axis: da0.5   = setConstant(0x11, 2, 0.5) [-]\n\
-    db - Set D coef for B axis: db0.5   = setConstant(0x12, 2, 0.5) [-]\n\
-    dc - Set D coef for C axis: dc0.5   = setConstant(0x13, 2, 0.5) [-]\n\
-    t  - Set Tau for all axis: t0.5     = setAllConstant(3, 0.5) [-]\n\
-    ta - Set Tau for A axis: ta0.5      = setConstant(0x11, 3, 0.5) [-]\n\
-    tb - Set Tau for B axis: ta0.5      = setConstant(0x12, 3, 0.5) [-]\n\
-    tc - Set Tau for C axis: ta0.5      = setConstant(0x13, 3, 0.5) [-]\n")
+    b  - Base position:           p0,0,-0.200 = moveBaseToXYZ(0, 0, -0.200) [m]\n\
+    c  - Center:                  c-0.200     = moveBaseToXYZ(0, 0, -0.200) [m]\n\
+    f  - Flat plane:              f0.01,0.02  = moveBaseToXYZ(0.010, 0.020, z_max) [m]\n\
+    a  - Angles:                  a0,0,30     = moveAllAxesTo(0, 0, 30) [°]\n\
+    z  - Z axis:                  z20         = moveAllAxesTo(20, 20, 20) [°]\n\
+    hh - Home all axes auto:      hh          = ha3, sleep(), hb3, sleep(), hc6, ...\n\
+    h  - Home all axes:           h1.5        = ha1.5, sleep(), hb1.5, ...\n\
+    ha - Home A axis:             ha1.5       = moveHomeAxis(0x11, 1.5) [V]\n\
+    hb - Home B axis:             hb1.5       = moveHomeAxis(0x12, 1.5) [V]\n\
+    hc - Home C axis:             hc1.5       = moveHomeAxis(0x13, 1.5) [V]\n\
+    p  - Set P coef for all axis: p0.5        = setAllConstant(0, 0.5) [-]\n\
+    pa - Set P coef for A axis:   pa0.5       = setConstant(0x11, 0, 0.5) [-]\n\
+    pb - Set P coef for B axis:   pa0.5       = setConstant(0x12, 0, 0.5) [-]\n\
+    pc - Set P coef for C axis:   pa0.5       = setConstant(0x13, 0, 0.5) [-]\n\
+    i  - Set I coef for all axis: i0.5        = setAllConstant(1, 0.5) [-]\n\
+    ia - Set I coef for A axis:   ia0.5       = setConstant(0x11, 1, 0.5) [-]\n\
+    ib - Set I coef for B axis:   ib0.5       = setConstant(0x12, 1, 0.5) [-]\n\
+    ic - Set I coef for C axis:   ic0.5       = setConstant(0x13, 1, 0.5) [-]\n\
+    d  - Set D coef for all axis: d0.5        = setAllConstant(2, 0.5) [-]\n\
+    da - Set D coef for A axis:   da0.5       = setConstant(0x11, 2, 0.5) [-]\n\
+    db - Set D coef for B axis:   db0.5       = setConstant(0x12, 2, 0.5) [-]\n\
+    dc - Set D coef for C axis:   dc0.5       = setConstant(0x13, 2, 0.5) [-]\n\
+    t  - Set Tau for all axis:    t0.5        = setAllConstant(3, 0.5) [-]\n\
+    ta - Set Tau for A axis:      ta0.5       = setConstant(0x11, 3, 0.5) [-]\n\
+    tb - Set Tau for B axis:      tb0.5       = setConstant(0x12, 3, 0.5) [-]\n\
+    tc - Set Tau for C axis:      tc0.5       = setConstant(0x13, 3, 0.5) [-]\n")
         game_mode: GameMode = GameMode.TEST_CMD
         FLAG_STAY_IN_FIRST_MODE = True
     else:
         print("Running without known args, standard use (expo)\n")
         FLAG_STAY_IN_FIRST_MODE = False
         game_mode: GameMode = GameMode.IDLE_STATE
+        runHomingSequence()
 
     pygame.init()
     # If set_mode is raising "pygame.error: Unable to open a console terminal",
@@ -567,30 +607,7 @@ if __name__ == "__main__":
                     if robot.moveHomeAxis(0x13, float(a)) != 0:
                         print("Error sending message")
                 elif subtype == 'h':
-                    angle = 30
-                    if robot.moveHomeAxis(0x11, 3.0) != 0:
-                        print("Error sending homing message to motor A")
-                    sleep(3)
-                    if robot.moveAxisTo(0x11, angle) != 0:
-                        print("Error sending return message to motor A")
-                    sleep(2)
-
-                    if robot.moveHomeAxis(0x12, 6.0) != 0:
-                        print("Error sending homing message to motor B")
-                    sleep(3)
-                    if robot.moveAxisTo(0x12, angle) != 0:
-                        print("Error sending return message to motor B")
-                    sleep(2)
-
-                    if robot.moveHomeAxis(0x13, 3.0) != 0:
-                        print("Error sending homing message to motor C")
-                    sleep(3)
-                    if robot.moveAxisTo(0x13, angle) != 0:
-                        print("Error sending return message to motor C")
-                    sleep(2)
-
-                    if robot.moveBaseToXYZ((0, 0, Z_WORKING)) != 0:
-                        print("Error sending message")
+                    runHomingSequence()
             elif type in ['p', 'i', 'd', 't']:
                 if type == 'p':
                     type_value = 0
