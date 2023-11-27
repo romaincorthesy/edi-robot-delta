@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 
-import pygame
-from pygame.locals import *
-from time import time_ns, sleep
-from math import sqrt
-from enum import Enum
-import json
-import RPi.GPIO as GPIO
-
-import ScaleConversion as SC
-from InputDevice import Touchfoil, Mouse, IInputDevice
 from OutputDevice import DeltaRobot
+from InputDevice import Touchfoil, Mouse, IInputDevice
+import ScaleConversion as SC
+import RPi.GPIO as GPIO
+import json
+from enum import Enum
+from math import sqrt
+from time import time_ns, sleep
+from pygame.locals import *
+import pygame
+
+print("game.py called and modules imported. Going to wait 10s to let things settle.")
+sleep(10)
+
 
 # GPIO definitions
 RIGHT_PANEL_PIN: int = 23
@@ -262,12 +265,15 @@ def followPath(path, path_scale_x, path_scale_y, period_descrease_ns=0, period_l
     robot_x, robot_y = getPathPoint(path, path_scale_x, path_scale_y, i)
     x, y = screenToRobot(
         input_device, robot, (robot_x, robot_y))
-    if robot.moveBaseToXYZ((x, y, Z_RETRACTED)) != 0:
-        print("Error sending message")
+
+    res = robot.moveBaseToXYZ((x, y, Z_RETRACTED))
+    if res != 0:
+        print("Error sending message in followPath at moveBaseToXYZ((x, y, Z_RETRACTED)), error:", res)
     sleep(0.5)
 
-    if robot.moveBaseToXYZ((x, y, Z_WORKING)) != 0:
-        print("Error sending message")
+    res = robot.moveBaseToXYZ((x, y, Z_WORKING))
+    if res != 0:
+        print("Error sending message in followPath at moveBaseToXYZ((x, y, Z_WORKING)), error:", res)
 
     # Start following path unretracted in 0.5s
     sleep(0.5)
@@ -405,20 +411,21 @@ def calculateRobotLimits():
     print("Done calculating. Everything's gonna be sloooow")
 
 
-# input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
-input_device = Mouse(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH,
-                     screen_usable_height=2*USABLE_RADIUS, screen_usable_width=2*USABLE_RADIUS)
-input_device.callbackUpdate = updateCallback
-
-
-# Output device
-robot = DeltaRobot(A_motor_id=0x11, B_motor_id=0x12, C_motor_id=0x13,
-                   A_encoder_id=0x11, B_encoder_id=0x12, C_encoder_id=0x13,
-                   sniff_traffic=False)
-
-
 if __name__ == "__main__":
     import sys
+
+    # Iitialize devices
+    # input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
+    input_device = Mouse(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH,
+                         screen_usable_height=2*USABLE_RADIUS, screen_usable_width=2*USABLE_RADIUS)
+    input_device.callbackUpdate = updateCallback
+
+    robot = DeltaRobot(A_motor_id=0x11, B_motor_id=0x12, C_motor_id=0x13,
+                       A_encoder_id=0x11, B_encoder_id=0x12, C_encoder_id=0x13,
+                       sniff_traffic=False)
+
+    print("Robot object created. Going to wait 10s to let things settle.")
+    sleep(10)
 
     # Get argument to set GameMode
     if len(sys.argv) > 1:   # sys.argv[0] : fileName

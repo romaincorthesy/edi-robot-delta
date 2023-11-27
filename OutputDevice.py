@@ -369,7 +369,7 @@ class DeltaRobot:
         try:
             angle_A, angle_B, angle_C = self.IGM(xyz_coord)
         except ValueError:
-            return 1
+            return 100
 
         # print(f"{xyz_coord[0]:.6f},{xyz_coord[1]:.6f},{xyz_coord[2]:.6f} > {angle_A:.6f}, {angle_B:.6f}, {angle_C:.6f}")
         return self.moveAllAxesTo(angle_A, angle_B, angle_C)
