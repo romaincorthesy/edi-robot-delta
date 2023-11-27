@@ -512,10 +512,10 @@ if __name__ == "__main__":
                 moveRobotToRetractedHome()
                 idle_state_init_done = True
 
-            # Wait for button to be pressed, then start go to ROBOT_FOLLOWS state
+            # Wait for button to be pressed, then start go to USER_FOLLOWS state
             if GPIO.input(BUTTON_PIN) == GPIO.LOW:
                 idle_state_init_done = False
-                game_mode = GameMode.ROBOT_FOLLOWS
+                game_mode = GameMode.USER_FOLLOWS
                 resetModeDurationTimer()
 
         elif game_mode == GameMode.ROBOT_FOLLOWS:
@@ -556,8 +556,6 @@ if __name__ == "__main__":
         elif game_mode == GameMode.USER_FOLLOWS:
             if not robot_follows_state_init_done:
                 # This must be done only once when entering the state
-                turnOnRightPanel()
-
                 sleep(1)
                 moveRobotToWorkingHome()
                 sleep(1)
@@ -567,13 +565,32 @@ if __name__ == "__main__":
                 # Robot wins against user
                 winner = "robot"
 
-            # Follow the path
+            turnOffBothPanels()
+
+            # Follow the R path
             path, path_scale_x, path_scale_y = getPath("./path_r.json")
             followPath(path, path_scale_x, path_scale_y)
-            sleep(2)
+            moveRobotToRetractedHome()
+            sleep(3)
 
-            # Go to next mode (IDLE_STATE) after ROBOT_FOLLOWS_DURATION_MS ms
-            if not FLAG_STAY_IN_FIRST_MODE and time_ns() - mode_duration_last_time_ns > ROBOT_FOLLOWS_DURATION_MS*1_000_000:
+            turnOnLeftPanel()   # Show answer
+            sleep(3)
+
+            # Wait
+            turnOffBothPanels()
+            sleep(3)
+
+            # Follow the G path
+            path, path_scale_x, path_scale_y = getPath("./path_g.json")
+            followPath(path, path_scale_x, path_scale_y)
+            moveRobotToRetractedHome()
+            sleep(3)
+
+            turnOnRightPanel()    # Show answer
+            sleep(3)
+
+            # Go to next mode (IDLE_STATE) after both path followed
+            if not FLAG_STAY_IN_FIRST_MODE:
                 robot_follows_state_init_done = False
                 game_mode = GameMode.IDLE_STATE
                 resetModeDurationTimer()
