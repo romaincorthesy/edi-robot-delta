@@ -575,7 +575,7 @@ if __name__ == "__main__":
             turnOffBothPanels()
 
             # Follow the R path
-            path, path_scale_x, path_scale_y = getPath("./path_r.json")
+            path, path_scale_x, path_scale_y = getPath("/home/EDI_pi_delta/edi-robot-delta/path_r.json")
             followPath(path, path_scale_x, path_scale_y)
             moveRobotToRetractedHome()
             sleep(3)
@@ -588,7 +588,7 @@ if __name__ == "__main__":
             sleep(3)
 
             # Follow the G path
-            path, path_scale_x, path_scale_y = getPath("./path_g.json")
+            path, path_scale_x, path_scale_y = getPath("/home/EDI_pi_delta/edi-robot-delta/path_g.json")
             followPath(path, path_scale_x, path_scale_y)
             moveRobotToRetractedHome()
             sleep(3)

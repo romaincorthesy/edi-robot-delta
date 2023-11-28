@@ -1,5 +1,16 @@
 # edi-robot-delta
 
+# Setup
+Install python modules **without sudo**:
+```sh
+$ cd /home/EDI_pi_delta/edi-robot-delta
+$ python3 -m pip -r requirements.txt
+```
+Install missing fonts:
+```sh
+$ sudo apt-get install python3-sdl2
+```
+
 ## Launching the program
 Run the file `/home/EDI_pi_delta/edi-robot-delta/game.py` without any arguments to run in standard mode.
 
@@ -57,14 +68,18 @@ declare -x LOGNAME="EDI_pi_delta"
 If you forget to do so, the following error message (or equivalent) will be shown on run attempt: `pygame.error: Unable to open a console terminal`
 
 ## Autostart
-The file `/home/EDI_pi_delta/.config/autostart/robot_delta.desktop` contains:
-```ini
-[Desktop Entry]
-Type=Application
-Name=RobotDelta_game_py
-Exec=/usr/bin/python3 /home/EDI_pi_delta/edi-robot-delta/game.py
+Add `@lxterminal -e python3 /home/EDI_pi_delta/edi-robot-delta/game.py` to the file `/etc/xdg/lxsession/LXDE-pi/autostart`:
+```sh
+$ sudo nano /etc/xdg/lxsession/LXDE-pi/autostart
 ```
-It will be run on login and will start the game in standard (expo) mode without any flags.
+It becomes
+```ini
+@lxpanel --profile LXDE-pi
+@pcmanfm --desktop --profile LXDE-pi
+@xscreensaver -no-splash
+@lxterminal -e python3 /home/EDI_pi_delta/edi-robot-delta/game.py
+```
+The script will be run on login (5 tries because of the `@`) and will start the game in standard (expo) mode (without any flags). It will start the python script in a terminal so the logs can be seen.
 
 ## IP config
 Added to `/etc/dhcpcd.conf`:
