@@ -306,7 +306,7 @@ def followPath(path, path_scale_x, path_scale_y, period_descrease_ns=0, period_l
 def runHomingSequence():
     angle = 30
     print("Start axis A homing and wait 3s.")
-    if robot.moveHomeAxis(0x11, 6.0) != 0:
+    if robot.moveHomeAxis(0x11) != 0:
         print("Error sending homing message to motor A")
     sleep(3)
     print("Move axis A to", angle, "° and wait 2s.")
@@ -315,7 +315,7 @@ def runHomingSequence():
     sleep(2)
 
     print("Start axis B homing and wait 3s.")
-    if robot.moveHomeAxis(0x12, 8.0) != 0:
+    if robot.moveHomeAxis(0x12) != 0:
         print("Error sending homing message to motor B")
     sleep(3)
     print("Move axis B to", angle, "° and wait 2s.")
@@ -324,7 +324,7 @@ def runHomingSequence():
     sleep(2)
 
     print("Start axis C homing and wait 3s.")
-    if robot.moveHomeAxis(0x13, 8.0) != 0:
+    if robot.moveHomeAxis(0x13) != 0:
         print("Error sending homing message to motor C")
     sleep(3)
     print("Move axis C to", angle, "° and wait 2s.")
@@ -353,11 +353,10 @@ def printAvailableTestCommands():
     f  - Flat plane:              f0.01,0.02  = moveBaseToXYZ(0.010, 0.020, z_max) [m]\n\
     a  - Angles:                  a0,0,30     = moveAllAxesTo(0, 0, 30) [°]\n\
     z  - Z axis:                  z20         = moveAllAxesTo(20, 20, 20) [°]\n\
-    hh - Home all axes auto:      hh          = ha3, sleep(), hb3, sleep(), hc6, ...\n\
-    h  - Home all axes:           h1.5        = ha1.5, sleep(), hb1.5, ...\n\
-    ha - Home A axis:             ha1.5       = moveHomeAxis(0x11, 1.5) [V]\n\
-    hb - Home B axis:             hb1.5       = moveHomeAxis(0x12, 1.5) [V]\n\
-    hc - Home C axis:             hc1.5       = moveHomeAxis(0x13, 1.5) [V]\n\
+    h  - Home all axes auto:      h           = ha, sleep(), hb, sleep(), hc, ...\n\
+    ha - Home A axis:             ha          = moveHomeAxis(0x11) [V]\n\
+    hb - Home B axis:             hb          = moveHomeAxis(0x12) [V]\n\
+    hc - Home C axis:             hc          = moveHomeAxis(0x13) [V]\n\
     p  - Set P coef for all axis: p0.5        = setAllConstant(0, 0.5) [-]\n\
     pa - Set P coef for A axis:   pa0.5       = setConstant(0x11, 0, 0.5) [-]\n\
     pb - Set P coef for B axis:   pa0.5       = setConstant(0x12, 0, 0.5) [-]\n\
@@ -626,45 +625,22 @@ if __name__ == "__main__":
                 if robot.moveAllAxesTo(float(a), float(a), float(a)) != 0:
                     print("Error sending message")
             elif type == 'h':
-                subtype = input1[1]
-                if subtype not in ['a', 'b', 'c', 'h']:
-                    angle = 30
-                    a = input1[1:]
-                    if robot.moveHomeAxis(0x11, float(a)) != 0:
-                        print("Error sending homing message to motor A")
-                    sleep(4)
-                    if robot.moveAxisTo(0x11, angle) != 0:
-                        print("Error sending return message to motor A")
-                    sleep(2)
-
-                    if robot.moveHomeAxis(0x12, float(a)) != 0:
-                        print("Error sending homing message to motor B")
-                    sleep(4)
-                    if robot.moveAxisTo(0x12, angle) != 0:
-                        print("Error sending return message to motor B")
-                    sleep(2)
-
-                    if robot.moveHomeAxis(0x13, float(a)) != 0:
-                        print("Error sending homing message to motor C")
-                    sleep(4)
-                    if robot.moveAxisTo(0x13, angle) != 0:
-                        print("Error sending return message to motor C")
-                    sleep(2)
-
+                try:
+                    subtype = input1[1]
+                except Exception:
+                    subtype = None
+                    
+                if subtype not in ['a', 'b', 'c']:
+                    runHomingSequence()
                 elif subtype == 'a':
-                    a = input1[2:]
-                    if robot.moveHomeAxis(0x11, float(a)) != 0:
+                    if robot.moveHomeAxis(0x11) != 0:
                         print("Error sending message")
                 elif subtype == 'b':
-                    a = input1[2:]
-                    if robot.moveHomeAxis(0x12, float(a)) != 0:
+                    if robot.moveHomeAxis(0x12) != 0:
                         print("Error sending message")
                 elif subtype == 'c':
-                    a = input1[2:]
-                    if robot.moveHomeAxis(0x13, float(a)) != 0:
-                        print("Error sending message")
-                elif subtype == 'h':
-                    runHomingSequence()
+                    if robot.moveHomeAxis(0x13) != 0:
+                        print("Error sending message")                    
             elif type in ['p', 'i', 'd', 't']:
                 if type == 'p':
                     type_value = 0

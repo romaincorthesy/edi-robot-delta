@@ -198,8 +198,8 @@ class DeltaRobot:
         Returns:
             int: 1 if the command failed, 0 otherwise
         """
-        # We adjusted the mechanical position of the arms by 50°
-        angle = angle - 50.0
+        # We adjusted the mechanical position of the arms by 40°
+        angle = angle - 40.0
 
         # Sign is stored separatly in the data frame
         processed_angle = abs(angle) * self.GEAR_RATIO
@@ -235,36 +235,24 @@ class DeltaRobot:
 
         return self._sendMsg(axis_id, data_paded)
 
-    def moveHomeAxis(self, axis_id: int, voltage: float) -> int:
-        """Send the axis moving outward at small speed (voltage controled).
-        The driver will automatically switch to a voltage control with v_cmd = 0V when the index is found.
+    def moveHomeAxis(self, axis_id: int) -> int:
+        """Send the axis moving outward at small speed.
 
         Args:
             axis_id (int): The motor id (0x11 to 0x13)
-            voltage (float): Voltage to give the motor (1 to 3V should be good)
 
         Returns:
             int: 1 if the command failed, 0 otherwise
         """
-        # Create the 4 parts of the data frame (control type, voltage sign, voltage integer part, voltage decimal part)
-        control_type_in_hex = "05"  # 0x05 : homing voltage control
-        # 0xff = negative voltage, 0x00 = positive or zero
-        sign_in_hex = "ff" if voltage < 0 else "00"
-        int_part = trunc(abs(voltage))
-        dec_part = trunc((abs(voltage) - int_part) * 100)
+        # Create the data frame (control type)
+        control_type_in_hex = "07"  # 0x07 : homing control
 
         # Convert the data frame parts in bytes
         control_type_in_bytes = bytes.fromhex(control_type_in_hex)
-        sign_in_bytes = bytes.fromhex(sign_in_hex)
-        int_part_in_bytes = int_part.to_bytes(2, "big")
-        dec_part_in_bytes = dec_part.to_bytes(1, "big")
 
         # Concat the data frame
         data_unpaded = (
             control_type_in_bytes
-            + sign_in_bytes
-            + int_part_in_bytes
-            + dec_part_in_bytes
         )
 
         # Pad data frame to be 8 bytes long
