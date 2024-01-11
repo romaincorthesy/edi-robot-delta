@@ -415,9 +415,9 @@ if __name__ == "__main__":
     import sys
 
     # Iitialize devices
-    # input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
-    input_device = Mouse(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH,
-                         screen_usable_height=2*USABLE_RADIUS, screen_usable_width=2*USABLE_RADIUS)
+    input_device = Touchfoil(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH)
+    # input_device = Mouse(screen_height=DISPLAY_HEIGHT, screen_width=DISPLAY_WIDTH,
+    #                      screen_usable_height=2*USABLE_RADIUS, screen_usable_width=2*USABLE_RADIUS)
     input_device.callbackUpdate = updateCallback
 
     robot = DeltaRobot(A_motor_id=0x11, B_motor_id=0x12, C_motor_id=0x13,
